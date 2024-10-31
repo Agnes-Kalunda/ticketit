@@ -21,7 +21,7 @@ class TicketService
     }
 
     /**
-     * assign ticket 
+     * assign ticket
      */
     public function assignToStaff($ticket_id, $user_id)
     {
@@ -32,4 +32,23 @@ class TicketService
         return $ticket;
     }
 
+    /**
+     * get customer tickets
+     */
+    public function getCustomerTickets($customer_id)
+    {
+        return Ticket::where('customer_id', $customer_id)
+                    ->with(['status', 'priority', 'category'])
+                    ->get();
+    }
+
+    /**
+     * get tickets
+     */
+    public function getStaffTickets($user_id)
+    {
+        return Ticket::where('agent_id', $user_id)
+                    ->with(['status', 'priority', 'category'])
+                    ->get();
+    }
 }
