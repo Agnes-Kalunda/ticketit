@@ -1,6 +1,6 @@
 <?php
 
-namespace Kordy\Ticketit;
+namespace Ticket\Ticketit;
 
 use Collective\Html\FormFacade as CollectiveForm;
 use Illuminate\Support\Facades\DB;
@@ -8,14 +8,14 @@ use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
-use Kordy\Ticketit\Console\Htmlify;
-use Kordy\Ticketit\Controllers\InstallController;
-use Kordy\Ticketit\Controllers\NotificationsController;
-use Kordy\Ticketit\Helpers\LaravelVersion;
-use Kordy\Ticketit\Models\Comment;
-use Kordy\Ticketit\Models\Setting;
-use Kordy\Ticketit\Models\Ticket;
-use Kordy\Ticketit\ViewComposers\TicketItComposer;
+use Ticket\Ticketit\Console\Htmlify;
+use Ticket\Ticketit\Controllers\InstallController;
+use Ticket\Ticketit\Controllers\NotificationsController;
+use Ticket\Ticketit\Helpers\LaravelVersion;
+use Ticket\Ticketit\Models\Comment;
+use Ticket\Ticketit\Models\Setting;
+use Ticket\Ticketit\Models\Ticket;
+use Ticket\Ticketit\ViewComposers\TicketItComposer;
 
 class TicketitServiceProvider extends ServiceProvider
 {
@@ -45,7 +45,6 @@ class TicketitServiceProvider extends ServiceProvider
             // Adding HTML5 color picker to form elements
             CollectiveForm::macro('custom', function ($type, $name, $value = '#000000', $options = []) {
                 $field = $this->input($type, $name, $value, $options);
-
                 return $field;
             });
 
@@ -78,17 +77,15 @@ class TicketitServiceProvider extends ServiceProvider
                         $notification->ticketAgentUpdated($modified_ticket, $original_ticket);
                     }
                 }
-
                 return true;
             });
 
-            // Send notification when ticket status is modified
+            // Send notification when ticket is created
             Ticket::created(function ($ticket) {
                 if (Setting::grab('assigned_notification')) {
                     $notification = new NotificationsController();
                     $notification->newTicketNotifyAgent($ticket);
                 }
-
                 return true;
             });
 
@@ -101,13 +98,15 @@ class TicketitServiceProvider extends ServiceProvider
 
             $this->loadViewsFrom($viewsDirectory, 'ticketit');
 
-            $this->publishes([$viewsDirectory => base_path('resources/views/vendor/ticketit')], 'views');
-            $this->publishes([__DIR__.'/Translations' => base_path('resources/lang/vendor/ticketit')], 'lang');
-            $this->publishes([__DIR__.'/Public' => public_path('vendor/ticketit')], 'public');
-            $this->publishes([__DIR__.'/Migrations' => base_path('database/migrations')], 'db');
+            $this->publishes([
+                $viewsDirectory => base_path('resources/views/vendor/ticketit'),
+                __DIR__.'/Translations' => base_path('resources/lang/vendor/ticketit'),
+                __DIR__.'/Public' => public_path('vendor/ticketit'),
+                __DIR__.'/Migrations' => base_path('database/migrations')
+            ], 'ticketit');
 
             // Check public assets are present, publish them if not
-//            $installer->publicAssets();
+            // $installer->publicAssets();
 
             $main_route = Setting::grab('main_route');
             $main_route_path = Setting::grab('main_route_path');
@@ -128,26 +127,30 @@ class TicketitServiceProvider extends ServiceProvider
             $this->loadViewsFrom(__DIR__.'/Views/bootstrap3', 'ticketit');
             $this->publishes([__DIR__.'/Migrations' => base_path('database/migrations')], 'db');
 
-            $authMiddleware = Helpers\LaravelVersion::authMiddleware();
+            $authMiddleware = LaravelVersion::authMiddleware();
 
             Route::get('/tickets-install', [
                 'middleware' => $authMiddleware,
                 'as'         => 'tickets.install.index',
-                'uses'       => 'Kordy\Ticketit\Controllers\InstallController@index',
+                'uses'       => 'Ticket\Ticketit\Controllers\InstallController@index',
             ]);
+
             Route::post('/tickets-install', [
                 'middleware' => $authMiddleware,
                 'as'         => 'tickets.install.setup',
-                'uses'       => 'Kordy\Ticketit\Controllers\InstallController@setup',
+                'uses'       => 'Ticket\Ticketit\Controllers\InstallController@setup',
             ]);
+
             Route::get('/tickets-upgrade', [
                 'middleware' => $authMiddleware,
                 'as'         => 'tickets.install.upgrade',
-                'uses'       => 'Kordy\Ticketit\Controllers\InstallController@upgrade',
+                'uses'       => 'Ticket\Ticketit\Controllers\InstallController@upgrade',
             ]);
+
             Route::get('/tickets', function () {
                 return redirect()->route('tickets.install.index');
             });
+
             Route::get('/tickets-admin', function () {
                 return redirect()->route('tickets.install.index');
             });
@@ -174,6 +177,7 @@ class TicketitServiceProvider extends ServiceProvider
 
         $this->app->register(\Jenssegers\Date\DateServiceProvider::class);
         $this->app->register(\Mews\Purifier\PurifierServiceProvider::class);
+
         /*
          * Create aliases for the dependency.
          */
@@ -183,10 +187,9 @@ class TicketitServiceProvider extends ServiceProvider
         /*
          * Register htmlify command. Need to run this when upgrading from <=0.2.2
          */
-
-        $this->app->singleton('command.kordy.ticketit.htmlify', function ($app) {
+        $this->app->singleton('command.ticket.ticketit.htmlify', function ($app) {
             return new Htmlify();
         });
-        $this->commands('command.kordy.ticketit.htmlify');
+        $this->commands('command.ticket.ticketit.htmlify');
     }
 }

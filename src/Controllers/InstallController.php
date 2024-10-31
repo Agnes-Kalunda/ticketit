@@ -1,6 +1,6 @@
 <?php
 
-namespace Kordy\Ticketit\Controllers;
+namespace Ticket\Ticketit\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\User;
@@ -8,10 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use Kordy\Ticketit\Models\Agent;
-use Kordy\Ticketit\Models\Setting;
-use Kordy\Ticketit\Seeds\SettingsTableSeeder;
-use Kordy\Ticketit\Seeds\TicketitTableSeeder;
+use Ticket\Ticketit\Models\Agent;
+use Ticket\Ticketit\Models\Setting;
+use Ticket\Ticketit\Seeds\SettingsTableSeeder;
+use Ticket\Ticketit\Seeds\TicketitTableSeeder;
 
 class InstallController extends Controller
 {

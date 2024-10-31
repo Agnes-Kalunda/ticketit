@@ -120,15 +120,15 @@
 
 
     @if($should_serialize)
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/{{ Kordy\Ticketit\Helpers\Cdn::CodeMirror }}/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/{{ Kordy\Ticketit\Helpers\Cdn::CodeMirror }}/mode/clike/clike.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/{{ Kordy\Ticketit\Helpers\Cdn::CodeMirror }}/mode/php/php.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/{{ Ticket\Ticketit\Helpers\Cdn::CodeMirror }}/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/{{ Ticket\Ticketit\Helpers\Cdn::CodeMirror }}/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/{{ Ticket\Ticketit\Helpers\Cdn::CodeMirror }}/mode/php/php.min.js"></script>
 
 
     <script>
 
-        loadCSS({!! '"'.asset('https://cdnjs.cloudflare.com/ajax/libs/codemirror/' . Kordy\Ticketit\Helpers\Cdn::CodeMirror . '/codemirror.min.css').'"' !!});
-        loadCSS({!! '"'.asset('https://cdnjs.cloudflare.com/ajax/libs/codemirror/' . Kordy\Ticketit\Helpers\Cdn::CodeMirror . '/theme/monokai.min.css').'"' !!});
+        loadCSS({!! '"'.asset('https://cdnjs.cloudflare.com/ajax/libs/codemirror/' . Ticket\Ticketit\Helpers\Cdn::CodeMirror . '/codemirror.min.css').'"' !!});
+        loadCSS({!! '"'.asset('https://cdnjs.cloudflare.com/ajax/libs/codemirror/' . Ticket\Ticketit\Helpers\Cdn::CodeMirror . '/theme/monokai.min.css').'"' !!});
 
         window.addEventListener('load', function(){
             CodeMirror.fromTextArea( document.querySelector("textarea[name='value']"), {

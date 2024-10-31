@@ -53,7 +53,7 @@
                                                     $agent->id
                                                     ],
                                         ]) !!}
-                        @foreach(\Kordy\Ticketit\Models\Category::all() as $agent_cat)
+                        @foreach(\Ticket\Ticketit\Models\Category::all() as $agent_cat)
                             <input name="agent_cats[]"
                                    type="checkbox"
                                    class="form-check-input"

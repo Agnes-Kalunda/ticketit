@@ -1,10 +1,10 @@
 <?php
 
-namespace Kordy\Ticketit\Models;
+namespace Ticket\Ticketit\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Kordy\Ticketit\Traits\ContentEllipse;
-use Kordy\Ticketit\Traits\Purifiable;
+use Ticket\Ticketit\Traits\ContentEllipse;
+use Ticket\Ticketit\Traits\Purifiable;
 
 class Comment extends Model
 {
@@ -20,7 +20,7 @@ class Comment extends Model
      */
     public function ticket()
     {
-        return $this->belongsTo('Kordy\Ticketit\Models\Ticket', 'ticket_id');
+        return $this->belongsTo('Ticket\Ticketit\Models\Ticket', 'ticket_id');
     }
 
     /**

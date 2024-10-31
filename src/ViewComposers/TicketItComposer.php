@@ -1,11 +1,11 @@
 <?php
 
-namespace Kordy\Ticketit\ViewComposers;
+namespace Ticket\Ticketit\ViewComposers;
 
-use Kordy\Ticketit\Controllers\ToolsController;
-use Kordy\Ticketit\Helpers\EditorLocale;
-use Kordy\Ticketit\Models\Agent;
-use Kordy\Ticketit\Models\Setting;
+use Ticket\Ticketit\Controllers\ToolsController;
+use Ticket\Ticketit\Helpers\EditorLocale;
+use Ticket\Ticketit\Models\Agent;
+use Ticket\Ticketit\Models\Setting;
 
 class TicketItComposer
 {
