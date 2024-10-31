@@ -15,6 +15,30 @@ class Ticket extends Model
     protected $table = 'ticketit';
     protected $dates = ['completed_at'];
 
+    protected $fillable = [
+        'subject',
+        'content',
+        'status_id',
+        'priority_id',
+        'category_id',
+        'agent_id',
+        'user_id',      // user_id
+        'customer_id'   // customer_id frm Customer Model
+    ];
+
+
+ 
+    #add new customer relationship
+    public function customer()
+    {
+        return $this->belongsTo('App\Customer', 'customer_id');
+    }
+
+
+    public function scopeCustomerTickets($query, $id){
+        return $query->where('', $id);
+    }     
+
     /**
      * List of completed tickets.
      *

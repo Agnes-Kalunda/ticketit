@@ -43,7 +43,7 @@ class TicketService
     }
 
     /**
-     * get tickets
+     * get staff tickets
      */
     public function getStaffTickets($user_id)
     {
