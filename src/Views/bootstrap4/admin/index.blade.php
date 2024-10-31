@@ -53,13 +53,13 @@
                                 <span class="caret"></span>
                             </button>
                             <div class="dropdown-menu" role="menu">
-                                <a class="dropdown-item" href="{{ action('\Kordy\Ticketit\Controllers\DashboardController@index', 2) }}">
+                                <a class="dropdown-item" href="{{ action('\Ticket\Ticketit\Controllers\DashboardController@index', 2) }}">
                                     {{ trans('ticketit::admin.index-3-months') }}
                                 </a>
-                                <a class="dropdown-item" href="{{ action('\Kordy\Ticketit\Controllers\DashboardController@index', 5) }}">
+                                <a class="dropdown-item" href="{{ action('\Ticket\Ticketit\Controllers\DashboardController@index', 5) }}">
                                     {{ trans('ticketit::admin.index-6-months') }}
                                 </a>
-                                <a class="dropdown-item" href="{{ action('\Kordy\Ticketit\Controllers\DashboardController@index', 11) }}">
+                                <a class="dropdown-item" href="{{ action('\Ticket\Ticketit\Controllers\DashboardController@index', 11) }}">
                                     {{ trans('ticketit::admin.index-12-months') }}
                                 </a>
                             </div>

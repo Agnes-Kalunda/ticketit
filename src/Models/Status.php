@@ -1,6 +1,6 @@
 <?php
 
-namespace Kordy\Ticketit\Models;
+namespace Ticket\Ticketit\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
@@ -24,6 +24,6 @@ class Status extends Model
      */
     public function tickets()
     {
-        return $this->hasMany('Kordy\Ticketit\Models\Ticket', 'status_id');
+        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'status_id');
     }
 }

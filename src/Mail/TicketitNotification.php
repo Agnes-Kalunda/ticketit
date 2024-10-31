@@ -1,6 +1,6 @@
 <?php
 
-namespace Kordy\Ticketit\Mail;
+namespace Ticket\Ticketit\Mail;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;

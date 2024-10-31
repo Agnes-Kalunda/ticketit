@@ -1,11 +1,11 @@
 <?php
 
-namespace Kordy\Ticketit\Controllers;
+namespace Ticket\Ticketit\Controllers;
 
 use App\Http\Controllers\Controller;
-use Kordy\Ticketit\Models\Agent;
-use Kordy\Ticketit\Models\Category;
-use Kordy\Ticketit\Models\Ticket;
+use Ticket\Ticketit\Models\Agent;
+use Ticket\Ticketit\Models\Category;
+use Ticket\Ticketit\Models\Ticket;
 
 class DashboardController extends Controller
 {
