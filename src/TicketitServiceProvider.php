@@ -26,17 +26,25 @@ class TicketitServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        // publish configurations
+        $this->publishes([
+            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
+        ], 'ticketit-config');
+
         if (!Schema::hasTable('migrations')) {
             // Database isn't installed yet.
             return;
         }
+
         $installer = new InstallController();
 
         // if a migration or new setting is missing scape to the installation
         if (empty($installer->inactiveMigrations()) && !$installer->inactiveSettings()) {
+            // Configure database connection
+            $this->setupDatabaseConnection();
+
             // Send the Agent User model to the view under $u
             // Send settings to views under $setting
-
             //cache $u
             $u = null;
 
@@ -44,8 +52,7 @@ class TicketitServiceProvider extends ServiceProvider
 
             // Adding HTML5 color picker to form elements
             CollectiveForm::macro('custom', function ($type, $name, $value = '#000000', $options = []) {
-                $field = $this->input($type, $name, $value, $options);
-                return $field;
+                return CollectiveForm::input($type, $name, $value, array_merge(['class' => 'form-control'], $options));
             });
 
             TicketItComposer::general();
@@ -102,11 +109,9 @@ class TicketitServiceProvider extends ServiceProvider
                 $viewsDirectory => base_path('resources/views/vendor/ticketit'),
                 __DIR__.'/Translations' => base_path('resources/lang/vendor/ticketit'),
                 __DIR__.'/Public' => public_path('vendor/ticketit'),
-                __DIR__.'/Migrations' => base_path('database/migrations')
+                __DIR__.'/Migrations' => base_path('database/migrations'),
+                __DIR__.'/Config' => base_path('config')
             ], 'ticketit');
-
-            // Check public assets are present, publish them if not
-            // $installer->publicAssets();
 
             $main_route = Setting::grab('main_route');
             $main_route_path = Setting::grab('main_route_path');
@@ -164,6 +169,11 @@ class TicketitServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        // Register the config
+        $this->mergeConfigFrom(
+            __DIR__.'/Config/ticketit.php', 'ticketit'
+        );
+
         /*
          * Register the service provider for the dependency.
          */
@@ -191,5 +201,27 @@ class TicketitServiceProvider extends ServiceProvider
             return new Htmlify();
         });
         $this->commands('command.ticket.ticketit.htmlify');
+    }
+
+    /**
+     * Setup the database connection for ticketit
+     */
+    protected function setupDatabaseConnection()
+    {
+        $connection = [
+            'driver' => config('ticketit.connection'),
+            'host' => config('ticketit.host'),
+            'port' => config('ticketit.port'),
+            'database' => config('ticketit.database'),
+            'username' => config('ticketit.username'),
+            'password' => config('ticketit.password'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ];
+
+        config(['database.connections.ticketit' => $connection]);
     }
 }
