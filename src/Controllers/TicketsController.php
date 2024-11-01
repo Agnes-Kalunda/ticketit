@@ -28,6 +28,26 @@ class TicketsController extends Controller
         $this->agent = $agent;
     }
 
+    /**
+     * determine if the current user is a customer
+     */
+    protected function isCustomer()
+    {
+        return Auth::guard('customer')->check();
+    }
+
+    /**
+     * get authenticated user (either customer or user)
+     */
+    protected function getAuthUser()
+    {
+        if ($this->isCustomer()) {
+            return Auth::guard('customer')->user();
+        }
+        return Auth::user();
+    }
+
+
     public function data($complete = false)
     {
         if (LaravelVersion::min('5.4')) {
@@ -36,33 +56,45 @@ class TicketsController extends Controller
             $datatables = app(\Yajra\Datatables\Datatables::class);
         }
 
-        $user = $this->agent->find(auth()->user()->id);
+        $collection = null;
 
-        if ($user->isAdmin()) {
+        if ($this->isCustomer()) {
+            // Customers only see their own tickets
+            $collection = $this->tickets->where('customer_id', $this->getAuthUser()->id);
             if ($complete) {
-                $collection = Ticket::complete();
+                $collection = $collection->complete();
             } else {
-                $collection = Ticket::active();
-            }
-        } elseif ($user->isAgent()) {
-            if ($complete) {
-                $collection = Ticket::complete()->agentUserTickets($user->id);
-            } else {
-                $collection = Ticket::active()->agentUserTickets($user->id);
+                $collection = $collection->active();
             }
         } else {
-            if ($complete) {
-                $collection = Ticket::userTickets($user->id)->complete();
+            $user = $this->agent->find(auth()->user()->id);
+
+            if ($user->isAdmin()) {
+                if ($complete) {
+                    $collection = Ticket::complete();
+                } else {
+                    $collection = Ticket::active();
+                }
+            } elseif ($user->isAgent()) {
+                if ($complete) {
+                    $collection = Ticket::complete()->agentUserTickets($user->id);
+                } else {
+                    $collection = Ticket::active()->agentUserTickets($user->id);
+                }
             } else {
-                $collection = Ticket::userTickets($user->id)->active();
+                if ($complete) {
+                    $collection = Ticket::userTickets($user->id)->complete();
+                } else {
+                    $collection = Ticket::userTickets($user->id)->active();
+                }
             }
         }
 
-        $collection
-            ->join('users', 'users.id', '=', 'ticketit.user_id')
-            ->join('ticketit_statuses', 'ticketit_statuses.id', '=', 'ticketit.status_id')
+        $collection = $collection->join('ticketit_statuses', 'ticketit_statuses.id', '=', 'ticketit.status_id')
             ->join('ticketit_priorities', 'ticketit_priorities.id', '=', 'ticketit.priority_id')
             ->join('ticketit_categories', 'ticketit_categories.id', '=', 'ticketit.category_id')
+            ->leftJoin('users', 'users.id', '=', 'ticketit.user_id')
+            ->leftJoin('customers', 'customers.id', '=', 'ticketit.customer_id')
             ->select([
                 'ticketit.id',
                 'ticketit.subject AS subject',
@@ -74,8 +106,11 @@ class TicketsController extends Controller
                 'ticketit.updated_at AS updated_at',
                 'ticketit_priorities.name AS priority',
                 'users.name AS owner',
+                'customers.name AS customer_name',
                 'ticketit.agent_id',
                 'ticketit_categories.name AS category',
+                'ticketit.customer_id',
+                'ticketit.user_id'
             ]);
 
         $collection = $datatables->of($collection);
@@ -84,14 +119,13 @@ class TicketsController extends Controller
 
         $collection->editColumn('updated_at', '{!! \Carbon\Carbon::parse($updated_at)->diffForHumans() !!}');
 
-        // method rawColumns was introduced in laravel-datatables 7, which is only compatible with >L5.4
-        // in previous laravel-datatables versions escaping columns wasn't defaut
         if (LaravelVersion::min('5.4')) {
             $collection->rawColumns(['subject', 'status', 'priority', 'category', 'agent']);
         }
 
         return $collection->make(true);
     }
+
 
     public function renderTicketTable($collection)
     {
