@@ -80,4 +80,5 @@ class CreateTicketitTable extends Migration
         Schema::drop('ticketit_priorities');
         Schema::drop('ticketit_statuses');
     }
+
 }
