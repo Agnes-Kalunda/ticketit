@@ -31,6 +31,8 @@ class TicketitServiceProvider extends ServiceProvider
             __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
         ], 'ticketit-config');
 
+        $this->loadMigrationsFrom(__DIR__.'/Migrations');
+
         if (!Schema::hasTable('migrations')) {
             // Database isn't installed yet.
             return;
