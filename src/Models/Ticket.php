@@ -6,9 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 use Jenssegers\Date\Date;
 use Ticket\Ticketit\Traits\ContentEllipse;
 use Ticket\Ticketit\Traits\Purifiable;
-use Illuminate\Support\Facades\Log; // Add this for logging
+use Illuminate\Support\Facades\Log; 
 
-class Ticket extends BaseModel
+class Ticket extends Model
 {
     use ContentEllipse;
     use Purifiable;

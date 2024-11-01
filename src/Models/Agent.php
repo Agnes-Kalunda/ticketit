@@ -2,264 +2,298 @@
 
 namespace Ticket\Ticketit\Models;
 
-use App\User;
-use Auth;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class Agent extends User
+class Agent extends Model
 {
     protected $table = 'users';
 
     /**
-     * list of all agents and returning collection.
-     *
-     * @param $query
-     * @param bool $paginate
-     *
-     * @return bool
-     *
-     * @internal param int $cat_id
+     * Get configured database connection
+     */
+    public function getConnectionName()
+    {
+        return config('ticketit.connection', env('DB_CONNECTION', 'mysql'));
+    }
+
+    /**
+     * Get the user model class from config
+     */
+    protected static function getUserModel()
+    {
+        return config('ticketit.models.user', env('TICKETIT_USER_MODEL', 'App\User'));
+    }
+
+    /**
+     * Get the customer model class from config
+     */
+    protected static function getCustomerModel()
+    {
+        return config('ticketit.models.customer', env('TICKETIT_CUSTOMER_MODEL', 'App\Customer'));
+    }
+
+    /**
+     * Get user guard name
+     */
+    protected static function getUserGuard()
+    {
+        return config('ticketit.guards.user', env('TICKETIT_USER_GUARD', 'web'));
+    }
+
+    /**
+     * Get customer guard name
+     */
+    protected static function getCustomerGuard()
+    {
+        return config('ticketit.guards.customer', env('TICKETIT_CUSTOMER_GUARD', 'customer'));
+    }
+
+    /**
+     * List of all agents
      */
     public function scopeAgents($query, $paginate = false)
     {
-        if ($paginate) {
-            return $query->where('ticketit_agent', '1')->paginate($paginate, ['*'], 'agents_page');
-        } else {
-            return $query->where('ticketit_agent', '1');
-        }
+        $query = $query->where('ticketit_agent', '1');
+        return $paginate ? 
+            $query->paginate($paginate, ['*'], 'agents_page') : 
+            $query;
     }
 
     /**
-     * list of all admins and returning collection.
-     *
-     * @param $query
-     * @param bool $paginate
-     *
-     * @return bool
-     *
-     * @internal param int $cat_id
+     * List of all admins
      */
     public function scopeAdmins($query, $paginate = false)
     {
-        if ($paginate) {
-            return $query->where('ticketit_admin', '1')->paginate($paginate, ['*'], 'admins_page');
-        } else {
-            return $query->where('ticketit_admin', '1')->get();
-        }
+        $query = $query->where('ticketit_admin', '1');
+        return $paginate ? 
+            $query->paginate($paginate, ['*'], 'admins_page') : 
+            $query->get();
     }
 
     /**
-     * list of all agents and returning collection.
-     *
-     * @param $query
-     * @param bool $paginate
-     *
-     * @return bool
-     *
-     * @internal param int $cat_id
-     */
-    public function scopeUsers($query, $paginate = false)
-    {
-        if ($paginate) {
-            return $query->where('ticketit_agent', '0')->paginate($paginate, ['*'], 'users_page');
-        } else {
-            return $query->where('ticketit_agent', '0')->get();
-        }
-    }
-
-    /**
-     * list of all agents and returning lists array of id and name.
-     *
-     * @param $query
-     *
-     * @return bool
-     *
-     * @internal param int $cat_id
+     * Get agents list for dropdown
      */
     public function scopeAgentsLists($query)
     {
-        if (version_compare(app()->version(), '5.2.0', '>=')) {
-            return $query->where('ticketit_agent', '1')->pluck('name', 'id')->toArray();
-        } else { // if Laravel 5.1
-            return $query->where('ticketit_agent', '1')->lists('name', 'id')->toArray();
-        }
+        return $query->where('ticketit_agent', '1')
+                    ->pluck('name', 'id')
+                    ->toArray();
     }
 
     /**
-     * Check if user is agent.
-     *
-     * @return bool
+     * Check if user is agent
      */
     public static function isAgent($id = null)
     {
-        if (isset($id)) {
-            $user = User::find($id);
-            if ($user->ticketit_agent) {
-                return true;
-            }
+        if ($id) {
+            $userClass = static::getUserModel();
+            $user = $userClass::find($id);
+            return $user && $user->ticketit_agent;
+        }
 
+        $guard = static::getUserGuard();
+        return auth()->guard($guard)->check() && 
+               auth()->guard($guard)->user()->ticketit_agent;
+    }
+
+    /**
+     * Check if user is admin
+     */
+    public static function isAdmin()
+    {
+        $guard = static::getUserGuard();
+        return auth()->guard($guard)->check() && 
+               auth()->guard($guard)->user()->ticketit_admin;
+    }
+
+    /**
+     * Check if user is assigned agent for ticket
+     */
+    public static function isAssignedAgent($id)
+    {
+        $guard = static::getUserGuard();
+        if (!auth()->guard($guard)->check()) {
             return false;
         }
-        if (auth()->check()) {
-            if (auth()->user()->ticketit_agent) {
-                return true;
-            }
+
+        $user = auth()->guard($guard)->user();
+        if (!$user->ticketit_agent) {
+            return false;
+        }
+
+        $ticket = Ticket::find($id);
+        return $ticket && $user->id == $ticket->agent_id;
+    }
+
+    /**
+     * Check ticket ownership
+     */
+    public static function isTicketOwner($id)
+    {
+        $ticket = Ticket::find($id);
+        if (!$ticket) {
+            return false;
+        }
+
+        $customerGuard = static::getCustomerGuard();
+        $userGuard = static::getUserGuard();
+
+        // Check customer ownership
+        if (auth()->guard($customerGuard)->check()) {
+            return $ticket->customer_id == auth()->guard($customerGuard)->id();
+        }
+
+        // Check user ownership
+        if (auth()->guard($userGuard)->check()) {
+            return $ticket->user_id == auth()->guard($userGuard)->id();
         }
 
         return false;
     }
 
     /**
-     * Check if user is admin.
-     *
-     * @return bool
+     * Get related categories
      */
-    public static function isAdmin()
+    public function categories(): BelongsToMany
     {
-        return auth()->check() && auth()->user()->ticketit_admin;
+        return $this->belongsToMany(
+            Category::class,
+            'ticketit_categories_users',
+            'user_id',
+            'category_id'
+        );
     }
 
     /**
-     * Check if user is the assigned agent for a ticket.
-     *
-     * @param int $id ticket id
-     *
-     * @return bool
+     * Get agent tickets
      */
-    public static function isAssignedAgent($id)
+    public function agentTickets($complete = false): HasMany
     {
-        return auth()->check() &&
-        	Auth::user()->ticketit_agent &&
-            Auth::user()->id == Ticket::find($id)->agent->id;
+        return $this->hasMany(Ticket::class, 'agent_id')
+                    ->when($complete, function ($query) {
+                        return $query->whereNotNull('completed_at');
+                    }, function ($query) {
+                        return $query->whereNull('completed_at');
+                    });
     }
 
     /**
-     * Check if user is the owner for a ticket.
-     *
-     * @param int $id ticket id
-     *
-     * @return bool
+     * Get total agent tickets
      */
-    public static function isTicketOwner($id)
+    public function agentTotalTickets(): HasMany
     {
-    	$ticket = Ticket::find($id);
-        return $ticket && auth()->check() &&
-            auth()->user()->id == $ticket->user->id;
+        return $this->hasMany(Ticket::class, 'agent_id');
     }
 
     /**
-     * Get related categories.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     * Get completed agent tickets
      */
-    public function categories()
+    public function agentCompleteTickets(): HasMany
     {
-        return $this->belongsToMany('Ticket\Ticketit\Models\Category', 'ticketit_categories_users', 'user_id', 'category_id');
+        return $this->hasMany(Ticket::class, 'agent_id')
+                    ->whereNotNull('completed_at');
     }
 
     /**
-     * Get related agent tickets (To be deprecated).
+     * Get open agent tickets
      */
-    public function agentTickets($complete = false)
+    public function agentOpenTickets(): HasMany
     {
-        if ($complete) {
-            return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id')->whereNotNull('completed_at');
-        } else {
-            return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id')->whereNull('completed_at');
-        }
+        return $this->hasMany(Ticket::class, 'agent_id')
+                    ->whereNull('completed_at');
     }
 
     /**
-     * Get related user tickets (To be deprecated).
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     * Get all tickets based on user role
      */
-    public function userTickets($complete = false)
+    public function getTickets($complete = false)
     {
-        if ($complete) {
-            return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id')->whereNotNull('completed_at');
-        } else {
-            return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id')->whereNull('completed_at');
-        }
-    }
+        $guard = static::getUserGuard();
+        $user = static::getUserModel()::find(auth()->guard($guard)->id());
 
-    public function tickets($complete = false)
-    {
-        if ($complete) {
-            return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id')->whereNotNull('completed_at');
-        } else {
-            return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id')->whereNull('completed_at');
-        }
-    }
-
-    public function allTickets($complete = false) // (To be deprecated)
-    {
-        if ($complete) {
-            return Ticket::whereNotNull('completed_at');
-        } else {
-            return Ticket::whereNull('completed_at');
-        }
-    }
-
-    public function getTickets($complete = false) // (To be deprecated)
-    {
-        $user = self::find(auth()->user()->id);
-
-        if ($user->isAdmin()) {
-            $tickets = $user->allTickets($complete);
-        } elseif ($user->isAgent()) {
-            $tickets = $user->agentTickets($complete);
-        } else {
-            $tickets = $user->userTickets($complete);
+        if (!$user) {
+            return collect();
         }
 
-        return $tickets;
+        if ($user->ticketit_admin) {
+            return $complete ? 
+                Ticket::whereNotNull('completed_at') :
+                Ticket::whereNull('completed_at');
+        }
+
+        if ($user->ticketit_agent) {
+            return $this->agentTickets($complete);
+        }
+
+        return Ticket::where('user_id', $user->id)
+                    ->when($complete, function ($query) {
+                        return $query->whereNotNull('completed_at');
+                    }, function ($query) {
+                        return $query->whereNull('completed_at');
+                    });
     }
 
     /**
-     * Get related agent total tickets.
+     * Check if customer can create tickets
      */
-    public function agentTotalTickets()
+    public static function customerCanCreateTicket()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id');
+        return config('ticketit.ticket.customer_can_create', true) &&
+               config('ticketit.permissions.customer.create_ticket', true);
     }
 
     /**
-     * Get related agent Completed tickets.
+     * Check if user can create tickets
      */
-    public function agentCompleteTickets()
+    public static function userCanCreateTicket()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id')->whereNotNull('completed_at');
+        return config('ticketit.ticket.user_can_create', true);
     }
 
     /**
-     * Get related agent tickets.
+     * Check if user can manage tickets
      */
-    public function agentOpenTickets()
+    public static function userCanManageTickets()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id')->whereNull('completed_at');
+        $guard = static::getUserGuard();
+        return auth()->guard($guard)->check() && 
+               config('ticketit.permissions.user.manage_tickets', true) &&
+               (auth()->guard($guard)->user()->ticketit_agent || 
+                auth()->guard($guard)->user()->ticketit_admin);
     }
 
     /**
-     * Get related user total tickets.
+     * Check if customer can view own tickets
      */
-    public function userTotalTickets()
+    public static function customerCanViewOwnTickets()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id');
+        return config('ticketit.permissions.customer.view_own_tickets', true);
     }
 
     /**
-     * Get related user Completed tickets.
+     * Check if customer can comment on own tickets
      */
-    public function userCompleteTickets()
+    public static function customerCanCommentOwnTickets()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id')->whereNotNull('completed_at');
+        return config('ticketit.permissions.customer.comment_own_tickets', true);
     }
 
     /**
-     * Get related user tickets.
+     * Check if agent should notify customer
      */
-    public function userOpenTickets()
+    public static function shouldNotifyCustomer()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id')->whereNull('completed_at');
+        return config('ticketit.ticket.agent_notify_customer', true);
+    }
+
+    /**
+     * Check if customer should notify agent
+     */
+    public static function shouldNotifyAgent()
+    {
+        return config('ticketit.ticket.customer_notify_agent', true);
     }
 }

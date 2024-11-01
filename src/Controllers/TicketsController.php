@@ -2,8 +2,7 @@
 
 namespace Ticket\Ticketit\Controllers;
 
-use App\Http\Controllers\Controller;
-use Cache;
+
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Ticket\Ticketit\Helpers\LaravelVersion;
@@ -14,6 +13,10 @@ use Ticket\Ticketit\Models\Setting;
 use Ticket\Ticketit\Models\Ticket;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Routing\Controller;
+
+
 
 class TicketsController extends Controller
 {
