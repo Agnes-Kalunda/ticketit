@@ -239,13 +239,15 @@ class TicketsController extends Controller
      * @return Response
      */
     public function create()
-    {
-        list($priorities, $categories) = $this->PCS();
-        return view(
-            $this->isCustomer() ? 'ticketit::tickets.create_customer' : 'ticketit::tickets.create',
-            compact('priorities', 'categories')
-        );
+{
+    if (!$this->isCustomer()) {
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('warning', 'Staff members cannot create tickets');
     }
+
+    list($priorities, $categories) = $this->PCS();
+    return view('ticketit::tickets.create_customer', compact('priorities', 'categories'));
+}
 
     /**
      * Store a newly created ticket and auto assign an agent for it.
@@ -256,6 +258,12 @@ class TicketsController extends Controller
      */
     public function store(Request $request)
     {
+
+        if (!$this->isCustomer()) {
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', 'Staff members cannot create tickets');
+        }
+        
         $this->validate($request, [
             'subject'     => 'required|min:3',
             'content'     => 'required|min:6',
