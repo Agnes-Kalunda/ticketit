@@ -4,69 +4,72 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateTicketitTables extends Migration
+class CreateTicketitTable extends Migration
 {
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
     public function up()
     {
-        // Statuses table
         Schema::create('ticketit_statuses', function (Blueprint $table) {
             $table->increments('id');
             $table->string('name');
             $table->string('color');
         });
 
-        // Priorities table
         Schema::create('ticketit_priorities', function (Blueprint $table) {
             $table->increments('id');
             $table->string('name');
             $table->string('color');
         });
 
-        // Categories table
         Schema::create('ticketit_categories', function (Blueprint $table) {
             $table->increments('id');
             $table->string('name');
             $table->string('color');
         });
 
-        // Categories-Agents table
         Schema::create('ticketit_categories_users', function (Blueprint $table) {
-            $table->integer('category_id')->unsigned();
+            $table->unsignedBigInteger('category_id');
             $table->unsignedBigInteger('user_id')->nullable();
         });
 
-        // Main tickets table
         Schema::create('ticketit', function (Blueprint $table) {
             $table->increments('id');
             $table->string('subject');
             $table->longText('content');
-            $table->integer('status_id')->unsigned();
-            $table->integer('priority_id')->unsigned();
+            $table->unsignedBigInteger('status_id');
+            $table->unsignedBigInteger('priority_id');
             $table->unsignedBigInteger('user_id')->nullable();
             $table->unsignedBigInteger('agent_id')->nullable();
-            $table->integer('category_id')->unsigned();
+            $table->unsignedBigInteger('category_id');
             $table->timestamps();
         });
 
-        // Comments table
         Schema::create('ticketit_comments', function (Blueprint $table) {
             $table->increments('id');
             $table->text('content');
             $table->unsignedBigInteger('user_id')->nullable();
-            $table->integer('ticket_id')->unsigned();
+            $table->unsignedBigInteger('ticket_id');
             $table->timestamps();
         });
 
-        // Audits table
         Schema::create('ticketit_audits', function (Blueprint $table) {
             $table->increments('id');
             $table->text('operation');
             $table->unsignedBigInteger('user_id')->nullable();
-            $table->integer('ticket_id')->unsigned();
+            $table->unsignedBigInteger('ticket_id');
             $table->timestamps();
         });
     }
 
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
     public function down()
     {
         Schema::drop('ticketit_audits');
