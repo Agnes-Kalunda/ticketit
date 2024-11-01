@@ -2,131 +2,128 @@
 
 namespace Ticket\Ticketit\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Cache;
 use Ticket\Ticketit\Models\Status;
 use Ticket\Ticketit\Helpers\LaravelVersion;
 
-class StatusesController extends Controller
+class StatusesController extends BaseTicketController
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return Response
-     */
+    public function __construct()
+    {
+        // Only staff can manage statuses
+        $this->middleware('auth:web');
+        $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware');
+    }
+
     public function index()
     {
-        // seconds expected for L5.8<=, minutes before that
+        if (!$this->isAdmin()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
+
         $time = LaravelVersion::min('5.8') ? 60*60 : 60;
-        $statuses = \Cache::remember('ticketit::statuses', $time, function () {
+        $statuses = Cache::remember('ticketit::statuses', $time, function () {
             return Status::all();
         });
 
         return view('ticketit::admin.status.index', compact('statuses'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return Response
-     */
     public function create()
     {
+        if (!$this->isAdmin()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
+
         return view('ticketit::admin.status.create');
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param Request $request
-     *
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function store(Request $request)
     {
+        if (!$this->isAdmin()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
+
         $this->validate($request, [
-            'name'      => 'required',
-            'color'     => 'required',
+            'name'  => 'required',
+            'color' => 'required',
         ]);
 
         $status = new Status();
         $status->create(['name' => $request->name, 'color' => $request->color]);
 
-        Session::flash('status', trans('ticketit::lang.status-name-has-been-created', ['name' => $request->name]));
+        Session::flash('status', trans('ticketit::lang.status-name-has-been-created', 
+            ['name' => $request->name]));
 
-        \Cache::forget('ticketit::statuses');
+        Cache::forget('ticketit::statuses');
 
         return redirect()->action('\Ticket\Ticketit\Controllers\StatusesController@index');
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param int $id
-     *
-     * @return Response
-     */
     public function show($id)
     {
+        if (!$this->canManageTickets()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
+
         return trans('ticketit::lang.status-all-tickets-here');
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param int $id
-     *
-     * @return Response
-     */
     public function edit($id)
     {
-        $status = Status::findOrFail($id);
+        if (!$this->isAdmin()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
 
+        $status = Status::findOrFail($id);
         return view('ticketit::admin.status.edit', compact('status'));
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param Request $request
-     * @param int     $id
-     *
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function update(Request $request, $id)
     {
+        if (!$this->isAdmin()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
+
         $this->validate($request, [
-            'name'      => 'required',
-            'color'     => 'required',
+            'name'  => 'required',
+            'color' => 'required',
         ]);
 
         $status = Status::findOrFail($id);
         $status->update(['name' => $request->name, 'color' => $request->color]);
 
-        Session::flash('status', trans('ticketit::lang.status-name-has-been-modified', ['name' => $request->name]));
+        Session::flash('status', trans('ticketit::lang.status-name-has-been-modified', 
+            ['name' => $request->name]));
 
-        \Cache::forget('ticketit::statuses');
+        Cache::forget('ticketit::statuses');
 
         return redirect()->action('\Ticket\Ticketit\Controllers\StatusesController@index');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param int $id
-     *
-     * @return Response
-     */
     public function destroy($id)
     {
+        if (!$this->isAdmin()) {
+            return redirect()->route('ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted'));
+        }
+
         $status = Status::findOrFail($id);
         $name = $status->name;
         $status->delete();
 
-        Session::flash('status', trans('ticketit::lang.status-name-has-been-deleted', ['name' => $name]));
+        Session::flash('status', trans('ticketit::lang.status-name-has-been-deleted', 
+            ['name' => $name]));
 
-        \Cache::forget('ticketit::statuses');
+        Cache::forget('ticketit::statuses');
 
         return redirect()->action('\Ticket\Ticketit\Controllers\StatusesController@index');
     }
