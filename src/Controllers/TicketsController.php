@@ -12,6 +12,8 @@ use Ticket\Ticketit\Models\Agent;
 use Ticket\Ticketit\Models\Category;
 use Ticket\Ticketit\Models\Setting;
 use Ticket\Ticketit\Models\Ticket;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class TicketsController extends Controller
 {
@@ -131,7 +133,7 @@ class TicketsController extends Controller
     {
         $collection->editColumn('subject', function ($ticket) {
             return (string) link_to_route(
-                Setting::grab('main_route').'.show',
+                $this->isCustomer() ? 'customer.ticketit.show' : Setting::grab('main_route').'.show',
                 $ticket->subject,
                 $ticket->id
             );
@@ -140,32 +142,36 @@ class TicketsController extends Controller
         $collection->editColumn('status', function ($ticket) {
             $color = $ticket->color_status;
             $status = e($ticket->status);
-
             return "<div style='color: $color'>$status</div>";
         });
 
         $collection->editColumn('priority', function ($ticket) {
             $color = $ticket->color_priority;
             $priority = e($ticket->priority);
-
             return "<div style='color: $color'>$priority</div>";
         });
 
         $collection->editColumn('category', function ($ticket) {
             $color = $ticket->color_category;
             $category = e($ticket->category);
-
             return "<div style='color: $color'>$category</div>";
         });
 
         $collection->editColumn('agent', function ($ticket) {
             $ticket = $this->tickets->find($ticket->id);
-
             return e($ticket->agent->name);
         });
 
+        // add customer name column for staff view
+        if (!$this->isCustomer()) {
+            $collection->editColumn('customer_name', function ($ticket) {
+                return $ticket->customer_id ? e($ticket->customer_name) : 'N/A';
+            });
+        }
+
         return $collection;
     }
+
 
     /**
      * Display a listing of active tickets related to user.
@@ -175,8 +181,8 @@ class TicketsController extends Controller
     public function index()
     {
         $complete = false;
-
-        return view('ticketit::index', compact('complete'));
+        return view($this->isCustomer() ? 'ticketit::tickets.index_customer' : 'ticketit::index', 
+            compact('complete'));
     }
 
     /**
@@ -186,8 +192,11 @@ class TicketsController extends Controller
      */
     public function indexComplete()
     {
+        if ($this->isCustomer()) {
+            return redirect()->route('customer.ticketit.index');
+        }
+        
         $complete = true;
-
         return view('ticketit::index', compact('complete'));
     }
 
@@ -199,7 +208,6 @@ class TicketsController extends Controller
      */
     protected function PCS()
     {
-        // seconds expected for L5.8<=, minutes before that
         $time = LaravelVersion::min('5.8') ? 60*60 : 60;
 
         $priorities = Cache::remember('ticketit::priorities', $time, function () {
@@ -221,6 +229,7 @@ class TicketsController extends Controller
         }
     }
 
+
     /**
      * Show the form for creating a new resource.
      *
@@ -229,8 +238,10 @@ class TicketsController extends Controller
     public function create()
     {
         list($priorities, $categories) = $this->PCS();
-
-        return view('ticketit::tickets.create', compact('priorities', 'categories'));
+        return view(
+            $this->isCustomer() ? 'ticketit::tickets.create_customer' : 'ticketit::tickets.create',
+            compact('priorities', 'categories')
+        );
     }
 
     /**
@@ -249,25 +260,36 @@ class TicketsController extends Controller
             'category_id' => 'required|exists:ticketit_categories,id',
         ]);
 
-        $ticket = new Ticket();
+        try {
+            $ticket = new Ticket();
+            $ticket->subject = $request->subject;
+            $ticket->setPurifiedContent($request->get('content'));
+            $ticket->priority_id = $request->priority_id;
+            $ticket->category_id = $request->category_id;
+            $ticket->status_id = Setting::grab('default_status_id');
 
-        $ticket->subject = $request->subject;
+            // Set creator based on auth type
+            if ($this->isCustomer()) {
+                $ticket->customer_id = $this->getAuthUser()->id;
+            } else {
+                $ticket->user_id = $this->getAuthUser()->id;
+            }
 
-        $ticket->setPurifiedContent($request->get('content'));
+            $ticket->autoSelectAgent();
+            $ticket->save();
 
-        $ticket->priority_id = $request->priority_id;
-        $ticket->category_id = $request->category_id;
-
-        $ticket->status_id = Setting::grab('default_status_id');
-        $ticket->user_id = auth()->user()->id;
-        $ticket->autoSelectAgent();
-
-        $ticket->save();
-
-        session()->flash('status', trans('ticketit::lang.the-ticket-has-been-created'));
-
-        return redirect()->route(Setting::grab('main_route') . '.index');
+            session()->flash('status', trans('ticketit::lang.the-ticket-has-been-created'));
+            
+            return redirect()->route(
+                $this->isCustomer() ? 'customer.ticketit.index' : Setting::grab('main_route').'.index'
+            );
+        } catch (\Exception $e) {
+            Log::error('Ticket creation failed: ' . $e->getMessage());
+            session()->flash('error', 'Failed to create ticket. Please try again.');
+            return back()->withInput();
+        }
     }
+
 
     /**
      * Display the specified resource.
@@ -280,24 +302,32 @@ class TicketsController extends Controller
     {
         $ticket = $this->tickets->findOrFail($id);
 
+        // Check permissions
+        if ($this->isCustomer()) {
+            if ($ticket->customer_id != $this->getAuthUser()->id) {
+                return redirect()->route('customer.ticketit.index')
+                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+            }
+        }
+
         list($priority_lists, $category_lists, $status_lists) = $this->PCS();
 
         $close_perm = $this->permToClose($id);
         $reopen_perm = $this->permToReopen($id);
 
         $cat_agents = Models\Category::find($ticket->category_id)->agents()->agentsLists();
-        if (is_array($cat_agents)) {
-            $agent_lists = ['auto' => 'Auto Select'] + $cat_agents;
-        } else {
-            $agent_lists = ['auto' => 'Auto Select'];
-        }
+        $agent_lists = is_array($cat_agents) ? ['auto' => 'Auto Select'] + $cat_agents : ['auto' => 'Auto Select'];
 
         $comments = $ticket->comments()->paginate(Setting::grab('paginate_items'));
 
-        return view('ticketit::tickets.show',
-            compact('ticket', 'status_lists', 'priority_lists', 'category_lists', 'agent_lists', 'comments',
-                'close_perm', 'reopen_perm'));
+        $view = $this->isCustomer() ? 'ticketit::tickets.show_customer' : 'ticketit::tickets.show';
+
+        return view($view, compact(
+            'ticket', 'status_lists', 'priority_lists', 'category_lists',
+            'agent_lists', 'comments', 'close_perm', 'reopen_perm'
+        ));
     }
+
 
     /**
      * Update the specified resource in storage.
@@ -309,6 +339,11 @@ class TicketsController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if ($this->isCustomer()) {
+            return redirect()->route('customer.ticketit.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+        }
+
         $this->validate($request, [
             'subject'     => 'required|min:3',
             'content'     => 'required|min:6',
@@ -321,9 +356,7 @@ class TicketsController extends Controller
         $ticket = $this->tickets->findOrFail($id);
 
         $ticket->subject = $request->subject;
-
         $ticket->setPurifiedContent($request->get('content'));
-
         $ticket->status_id = $request->status_id;
         $ticket->category_id = $request->category_id;
         $ticket->priority_id = $request->priority_id;
@@ -337,10 +370,8 @@ class TicketsController extends Controller
         $ticket->save();
 
         session()->flash('status', trans('ticketit::lang.the-ticket-has-been-modified'));
-
         return redirect()->route(Setting::grab('main_route').'.show', $id);
     }
-
     /**
      * Remove the specified resource from storage.
      *
@@ -355,7 +386,6 @@ class TicketsController extends Controller
         $ticket->delete();
 
         session()->flash('status', trans('ticketit::lang.the-ticket-has-been-deleted', ['name' => $subject]));
-
         return redirect()->route(Setting::grab('main_route').'.index');
     }
 
@@ -380,14 +410,12 @@ class TicketsController extends Controller
             $ticket->save();
 
             session()->flash('status', trans('ticketit::lang.the-ticket-has-been-completed', ['name' => $subject]));
-
             return redirect()->route(Setting::grab('main_route').'.index');
         }
 
         return redirect()->route(Setting::grab('main_route').'.index')
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
     }
-
     /**
      * Reopen ticket from complete status.
      *
@@ -409,14 +437,12 @@ class TicketsController extends Controller
             $ticket->save();
 
             session()->flash('status', trans('ticketit::lang.the-ticket-has-been-reopened', ['name' => $subject]));
-
             return redirect()->route(Setting::grab('main_route').'.index');
         }
 
         return redirect()->route(Setting::grab('main_route').'.index')
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
     }
-
     public function agentSelectList($category_id, $ticket_id)
     {
         $cat_agents = Models\Category::find($category_id)->agents()->agentsLists();
