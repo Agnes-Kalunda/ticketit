@@ -118,4 +118,108 @@ return [
     ],
 ];
 
+## Usage
 
+### Customer Functions
+
+```php
+// Get customer tickets
+$customer->tickets();
+$customer->activeTickets();
+$customer->completedTickets();
+
+// Check permissions
+$customer->canCreateTicket();
+$customer->canViewTickets();
+
+// Get statistics
+$customer->getTicketStats();
+```
+
+### User/Staff Functions
+
+```php
+// Get user tickets
+$user->tickets();
+$user->activeTickets();
+$user->agentTickets();
+
+// Check roles/permissions
+$user->isAgent();
+$user->isAdmin();
+$user->canManageTickets();
+
+// Get statistics
+$user->getTicketStats();
+```
+
+### Creating Tickets
+
+For Customers:
+```php
+$ticket = new Ticket();
+$ticket->subject = 'Issue Subject';
+$ticket->content = 'Issue Description';
+$ticket->priority_id = 1;
+$ticket->category_id = 1;
+$ticket->customer_id = auth()->guard('customer')->id();
+$ticket->save();
+```
+
+For Users/Staff:
+```php
+$ticket = new Ticket();
+$ticket->subject = 'Issue Subject';
+$ticket->content = 'Issue Description';
+$ticket->priority_id = 1;
+$ticket->category_id = 1;
+$ticket->user_id = auth()->id();
+$ticket->save();
+```
+
+## Routes
+
+The package provides separate route groups for customers and staff:
+
+### Customer Routes
+- `/customer/tickets` - List customer tickets
+- `/customer/tickets/create` - Create new ticket
+- `/customer/tickets/{id}` - View ticket
+
+### Staff Routes
+- `/tickets` - List all tickets
+- `/tickets/create` - Create new ticket
+- `/tickets/{id}` - View ticket
+- `/tickets/{id}/edit` - Edit ticket
+- `/tickets-admin` - Admin panel
+
+## Customization
+
+### Views
+Publish and customize views:
+```bash
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag="views"
+```
+
+## Events and Notifications
+
+The package dispatches events for:
+- Ticket creation
+- Status changes
+- Comments
+- Agent assignment
+
+Configure notification settings in the config file.
+
+## Database Structure
+
+Main tables:
+- `ticketit` - Tickets
+- `ticketit_comments` - Ticket comments
+- `ticketit_categories` - Ticket categories
+- `ticketit_priorities` - Ticket priorities
+- `ticketit_statuses` - Ticket statuses
+
+
+## License
+The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
