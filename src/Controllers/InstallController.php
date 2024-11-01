@@ -36,18 +36,6 @@ class InstallController extends BaseTicketController
         }
     }
 
-    public function publicAssets()
-    {
-        $public = $this->allFilesList(public_path('vendor/ticketit'));
-        $assets = $this->allFilesList(base_path('vendor/ticket/ticketit/src/Public'));
-        if ($public !== $assets) {
-            Artisan::call('vendor:publish', [
-                '--provider' => 'Ticket\Ticketit\TicketitServiceProvider',
-                '--tag'     => ['public'],
-            ]);
-        }
-    }
-
     public function index()
     {
         if (count($this->migrations_tables) == count($this->inactiveMigrations())
