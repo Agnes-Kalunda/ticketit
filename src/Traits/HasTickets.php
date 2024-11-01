@@ -8,15 +8,8 @@ use Illuminate\Support\Facades\Config;
 trait HasTickets
 {
     /**
-     * Get the model class from config
-     */
-    protected function getModelClass($type)
-    {
-        return Config::get("ticketit.models.{$type}", "App\\{$type}");
-    }
-
-    /**
      * Get all tickets associated with model
+     * Handles both original user tickets and new customer tickets
      */
     public function tickets(): HasMany
     {
@@ -29,7 +22,7 @@ trait HasTickets
     }
 
     /**
-     * Get active tickets
+     * Get active tickets (original functionality)
      */
     public function activeTickets(): HasMany
     {
@@ -37,7 +30,7 @@ trait HasTickets
     }
 
     /**
-     * Get completed tickets
+     * Get completed tickets (original functionality)
      */
     public function completedTickets(): HasMany
     {
@@ -45,7 +38,34 @@ trait HasTickets
     }
 
     /**
-     * Check if model can manage tickets
+     * Get agent tickets (original functionality)
+     */
+    public function agentTickets($complete = false): HasMany
+    {
+        $query = $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id');
+        return $complete ? 
+            $query->whereNotNull('completed_at') : 
+            $query->whereNull('completed_at');
+    }
+
+    /**
+     * Check if user is agent (original functionality)
+     */
+    public function isAgent(): bool
+    {
+        return $this->ticketit_agent ?? false;
+    }
+
+    /**
+     * Check if user is admin (original functionality)
+     */
+    public function isAdmin(): bool
+    {
+        return $this->ticketit_admin ?? false;
+    }
+
+    /**
+     * New functionality: Check if model can manage tickets
      */
     public function canManageTickets(): bool
     {
@@ -55,9 +75,8 @@ trait HasTickets
                Config::get('ticketit.permissions.user.manage_tickets', true);
     }
 
-
     /**
-     * Check if model can create tickets
+     * New functionality: Check if model can create tickets
      */
     public function canCreateTicket(): bool
     {
@@ -67,15 +86,15 @@ trait HasTickets
             return Config::get('ticketit.permissions.customer.create_ticket', true);
         }
         
-        return Config::get('ticketit.permissions.user.create_ticket', true);
+        return Config::get('ticketit.ticket.user_can_create', true);
     }
 
     /**
-     * Check if model can view tickets
+     * New functionality: Check ticket viewing permissions
      */
     public function canViewTickets(): bool
     {
-        $customerModel = $this->getModelClass('customer');
+        $customerModel = Config::get('ticketit.models.customer');
         
         if ($this instanceof $customerModel) {
             return Config::get('ticketit.permissions.customer.view_own_tickets', true);
@@ -85,61 +104,50 @@ trait HasTickets
     }
 
     /**
-     * Check if model can comment on tickets
+     * Original functionality: Get all assigned tickets
      */
-    public function canCommentOnTickets(): bool
+    public function allAssignedTickets(): HasMany
     {
-        $customerModel = $this->getModelClass('customer');
+        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'agent_id');
+    }
+
+    /**
+     * Original functionality: Get user total tickets
+     */
+    public function userTotalTickets(): HasMany
+    {
+        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'user_id');
+    }
+
+    /**
+     * New functionality: Check if owner of ticket
+     */
+    public function isTicketOwner($ticket_id): bool
+    {
+        $customerModel = Config::get('ticketit.models.customer');
         
         if ($this instanceof $customerModel) {
-            return Config::get('ticketit.permissions.customer.comment_own_tickets', true);
+            return $this->tickets()
+                       ->where('id', $ticket_id)
+                       ->exists();
         }
         
-        return true; // Users can always comment
+        return $this->tickets()
+                   ->where('id', $ticket_id)
+                   ->orWhere('agent_id', $this->id)
+                   ->exists();
     }
 
     /**
-     * Get tickets that need attention
+     * Original functionality: Get open tickets count
      */
-    public function pendingTickets(): HasMany
+    public function getOpenTicketsCount(): int
     {
-        return $this->activeTickets()
-            ->where('status_id', Config::get('ticketit.defaults.status_id'));
+        return $this->activeTickets()->count();
     }
 
     /**
-     * Get high priority tickets
-     */
-    public function highPriorityTickets(): HasMany
-    {
-        return $this->activeTickets()
-            ->where('priority_id', Config::get('ticketit.defaults.priority_id'));
-    }
-
-    /**
-     * Get tickets by category
-     */
-    public function ticketsByCategory($category_id): HasMany
-    {
-        return $this->tickets()->where('category_id', $category_id);
-    }
-
-    /**
-     * Check if should receive notifications
-     */
-    public function shouldNotify(): bool
-    {
-        $customerModel = $this->getModelClass('customer');
-        
-        if ($this instanceof $customerModel) {
-            return Config::get('ticketit.ticket.agent_notify_customer', true);
-        }
-        
-        return Config::get('ticketit.ticket.customer_notify_agent', true);
-    }
-
-    /**
-     * Get ticket statistics
+     * New functionality: Get ticket statistics
      */
     public function getTicketStats(): array
     {
@@ -147,24 +155,10 @@ trait HasTickets
             'total' => $this->tickets()->count(),
             'active' => $this->activeTickets()->count(),
             'completed' => $this->completedTickets()->count(),
-            'pending' => $this->pendingTickets()->count(),
-            'high_priority' => $this->highPriorityTickets()->count(),
+            'agent_assigned' => $this->isAgent() ? $this->agentTickets()->count() : 0,
+            'high_priority' => $this->tickets()
+                                  ->where('priority_id', Config::get('ticketit.defaults.priority_id'))
+                                  ->count()
         ];
-    }
-
-    /**
-     * Check if model owns a specific ticket
-     */
-    public function ownsTicket($ticket_id): bool
-    {
-        $customerModel = $this->getModelClass('customer');
-        
-        if ($this instanceof $customerModel) {
-            return $this->tickets()->where('id', $ticket_id)->exists();
-        }
-        
-        return $this->tickets()->where('id', $ticket_id)
-            ->orWhere('agent_id', $this->id)
-            ->exists();
     }
 }
