@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class BaseModel extends Model
 {
     /**
-     * Get the database connection for the model.
+     * get the database connection for the model.
      */
     public function getConnectionName()
     {

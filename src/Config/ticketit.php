@@ -29,5 +29,20 @@ return [
     'username' => env('TICKETIT_DB_USERNAME', env('DB_USERNAME', 'forge')),
     'password' => env('TICKETIT_DB_PASSWORD', env('DB_PASSWORD', '')),
 
+
+     // access permissions
+     'permissions' => [
+        'customer' => [
+            'create_ticket' => true,
+            'view_own_tickets' => true,
+            'comment_own_tickets' => true,
+        ],
+        'user' => [
+            'view_all_tickets' => true,
+            'manage_tickets' => true,
+            'manage_settings' => true,
+        ],
+    ],
+
    
 ];
