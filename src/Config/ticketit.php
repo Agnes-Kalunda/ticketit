@@ -29,5 +29,28 @@ return [
     'username' => env('TICKETIT_DB_USERNAME', env('DB_USERNAME', 'forge')),
     'password' => env('TICKETIT_DB_PASSWORD', env('DB_PASSWORD', '')),
 
+
+     // ticket configuration
+     'ticket' => [
+        'user_can_create' => true,  // allow staff/users to create tickets
+        'customer_can_create' => true,  // allow customers to create tickets
+        'agent_notify_customer' => true,  // notify customer when agent replies
+        'customer_notify_agent' => true,  // notify agent when customer replies
+    ],
+
+     // access permissions
+     'permissions' => [
+        'customer' => [
+            'create_ticket' => true,
+            'view_own_tickets' => true,
+            'comment_own_tickets' => true,
+        ],
+        'user' => [
+            'view_all_tickets' => true,
+            'manage_tickets' => true,
+            'manage_settings' => true,
+        ],
+    ],
+
    
 ];
