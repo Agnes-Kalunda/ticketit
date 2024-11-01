@@ -79,44 +79,61 @@ class SettingsTableSeeder extends Seeder
     public function getDefaults()
     {
         return [
+            /*
+             * Model and Authentication configurations
+             */
+            'models' => [
+                'customer' => 'App\Customer',
+                'user' => 'App\User',
+            ],
+
+            'guards' => [
+                'customer' => 'customer',
+                'user' => 'web',
+            ],
 
             /*
-             * Ticketit main route: Where to load the ticket system (ex. http://url/tickets)
-             * Default: /ticket
+             * Route configurations
              */
             'main_route'      => 'tickets',
             'main_route_path' => 'tickets',
-            /*
-             * Ticketit admin route: Where to load the ticket administration dashboard (ex. http://url/tickets-admin)
-             * Default: /ticket
-             */
             'admin_route'      => 'tickets-admin',
             'admin_route_path' => 'tickets-admin',
+            'customer_route'      => 'customer/tickets', 
+            'customer_route_path' => 'customer/tickets',
+
             /*
-             * Template adherence: The master blade template to be extended
-             * Default: resources/views/master.blade.php
+             * Permission settings
+             */
+            'customer_tickets' => [
+                'can_create' => 'yes',
+                'can_view_own' => 'yes',
+                'can_comment' => 'yes',
+                'can_edit_own' => 'no',
+                'can_delete_own' => 'no'
+            ],
+
+            /*
+             * Template adherence settings
              */
             'master_template' => 'master',
 
             /*
-             * Switches between bootstrap 3 and 4
-             * Default: 3 for <L5.6, 4 for >=L5.6
+             * Bootstrap version settings
              */
             'bootstrap_version' => LaravelVersion::min('5.6') ? '4' : '3',
 
             /*
-             * Template adherence: The email blade template to be extended
-             * Default: ticketit::emails.templates.ticketit
+             * Email template settings
              */
             'email.template' => 'ticketit::emails.templates.ticketit',
-            // resources/views/emails/templates/ticketit.blade.php
             'email.header'           => 'Ticket Update',
             'email.signoff'          => 'Thank you for your patience!',
             'email.signature'        => 'Your friends',
             'email.dashboard'        => 'My Dashboard',
-            'email.google_plus_link' => '#', // Toogle icon link: false or string
-            'email.facebook_link'    => '#', // Toogle icon link: false or string
-            'email.twitter_link'     => '#', // Toogle icon link: false or string
+            'email.google_plus_link' => '#',
+            'email.facebook_link'    => '#',
+            'email.twitter_link'     => '#',
             'email.footer'           => 'Powered by Ticketit',
             'email.footer_link'      => 'https://github.com/thekordy/ticketit',
             'email.color_body_bg'    => '#FFFFFF',
@@ -124,145 +141,68 @@ class SettingsTableSeeder extends Seeder
             'email.color_content_bg' => '#F46B45',
             'email.color_footer_bg'  => '#414141',
             'email.color_button_bg'  => '#AC4D2F',
+
             /*
-             * The default status for new created tickets
-             * Default: 1
+             * Status settings
              */
             'default_status_id' => 1,
-            /*
-             * The default closing status
-             * Default: false
-             */
             'default_close_status_id' => false,
-            /*
-             * The default reopening status
-             * Default: false
-             */
             'default_reopen_status_id' => false,
+
             /*
-             * [Deprecated] User ids who are members of admin role
-             * Default: 1
-             */
-//            'admin_ids' => [1],
-            /*
-             * Pagination length: For standard pagination.
-             * Default: 1
+             * Pagination settings
              */
             'paginate_items' => 10,
-            /*
-             * Pagination length: For tickets table.
-             * Default: 1
-             */
             'length_menu' => [[10, 50, 100], [10, 50, 100]],
+
             /*
-             * Status notification: send email notification to ticket owner/Agent when ticket status is changed
-             * Default is send notification: 'yes'
-             * Do not send notification: 'no'
+             * Notification settings
              */
             'status_notification' => 'yes',
-            /*
-             * Comment notification: Send notification when new comment is posted
-             * Default is send notification: 'yes'
-             * Do not send notification: 'no'
-             */
             'comment_notification' => 'yes',
-            /*
-             * Use Queue method when sending emails (Mail::queue instead of Mail::send). Note that Mail::queue needs to be
-             * configured first http://laravel.com/docs/5.1/queues
-             * Default is to not use queue: 'no'
-             * use queue: 'yes'
-             */
             'queue_emails' => 'no',
-            /*
-             * Agent notify: To notify assigned agent (either auto or manual assignment) of new assigned or transferred tickets
-             * Default: 'yes'
-             * not to notify agent: 'no'
-             */
             'assigned_notification' => 'yes',
+            'customer_notification' => 'yes',
+
             /*
-             * Agent restrict: Restrict agents access to only their assigned tickets
-             * Default: 'no'
-             * Agent access only assigned tickets: 'yes'
+             * Agent settings
              */
             'agent_restrict' => 'no',
+
             /*
-             * Close Ticket Perm: Who has a permission to close tickets
-             * Default: ['owner' => 'yes', 'agent' => 'yes', 'admin' => 'yes']
+             * Permission settings for different roles
              */
-            'close_ticket_perm' => ['owner' => 'yes', 'agent' => 'yes', 'admin' => 'yes'],
+            'close_ticket_perm' => [
+                'owner' => 'yes', 
+                'agent' => 'yes', 
+                'admin' => 'yes',
+                'customer' => 'no'
+            ],
+            'reopen_ticket_perm' => [
+                'owner' => 'yes', 
+                'agent' => 'yes', 
+                'admin' => 'yes',
+                'customer' => 'yes'
+            ],
+
             /*
-             * Reopen Ticket Perm: Who has a permission to reopen tickets
-             * Default: ['owner' => 'yes', 'agent' => 'yes', 'admin' => 'yes']
-             */
-            'reopen_ticket_perm' => ['owner' => 'yes', 'agent' => 'yes', 'admin' => 'yes'],
-            /*
-             * Delete Confirmation: Choose which confirmation message type to use when confirming a deleting
-             * Default: builtin
-             * Options: builtin, modal
+             * Delete confirmation settings
              */
             'delete_modal_type' => 'builtin',
 
-            /* ------------------ JS EDITOR ------------------ */
-
             /*
-             * Enable summernote editor on textareas
-             * Default: yes
+             * Editor settings
              */
             'editor_enabled' => 'yes',
-
-            /*
-             * If Font-awesome css is included outside ticketit, this should be set to 'no'
-             * Default: 'yes'
-             */
             'include_font_awesome' => 'yes',
-
-            /*
-             * Which language should summernote js texteditor use
-             * If value is 'laravel', locale set in config/app.php will be used
-             *
-             * Example: 'hu-HU' for Hungarian
-             *
-             * See available language codes here: https://cdnjs.com/libraries/summernote/0.7.3
-             *
-             * Default: 'en'
-             */
             'summernote_locale' => 'en',
-
-            /*
-             * Whether include codemirror sytax highlighter or not
-             * http://summernote.org/examples/#codemirror-as-codeview
-             *
-             * Default: 'yes'
-             */
-
             'editor_html_highlighter' => 'yes',
-
-            /*
-             * Theme for sytax highlighter
-             *
-             * Available themes here: https://cdnjs.com/libraries/codemirror/5.10.0
-             *
-             * Default: 'monikai'
-             */
             'codemirror_theme' => 'monokai',
-
-            /*
-             * Init values for summernote js texteditor in JSON
-             * See avaiable options here: http://summernote.org/deep-dive/#initialization-options
-             *
-             * This setting stores the path to the json config file, relative to project route
-             */
             'summernote_options_json_file' => 'vendor/kordy/ticketit/src/JSON/summernote_init.json',
 
             /*
-             * Set which html tags are allowed
-             *
-             * This overrides the settings part of this file: https://github.com/mewebstudio/Purifier/blob/master/config/purifier.php
-             * The same config can be achived by running php artisan vendor:publish and modifying config/purifier.php
-             *
-             * Full docs: http://htmlpurifier.org/docs
+             * Purifier settings
              */
-
             'purifier_config' => [
                 'HTML.SafeIframe'      => 'true',
                 'URI.SafeIframeRegexp' => '%^(http://|https://|//)(www.youtube.com/embed/|player.vimeo.com/video/)%',
@@ -270,14 +210,10 @@ class SettingsTableSeeder extends Seeder
             ],
 
             /*
-             * Set custom routes file
-             *
-             * Useful if you want to replace any of the Ticketit components
-             *
-             * Default: __DIR__.'/routes.php'
+             * Routes settings
              */
-            'routes' => base_path('vendor/kordy/ticketit/src').'/routes.php',
-
+            'routes' => base_path('vendor/ticket/ticketit/src').'/routes.php',
         ];
     }
+
 }

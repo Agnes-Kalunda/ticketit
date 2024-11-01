@@ -1,7 +1,38 @@
 <?php
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+use Ticket\Ticketit\Models\Setting;
 
-Route::group(['middleware' => \Ticket\Ticketit\Helpers\LaravelVersion::authMiddleware()], function () use ($main_route, $main_route_path, $admin_route, $admin_route_path) {
+
+// load settings with proper caching
+$settings = [
+    'main_route' => Setting::grab('main_route') ?: 'tickets',
+    'main_route_path' => Setting::grab('main_route_path') ?: 'tickets',
+    'admin_route' => Setting::grab('admin_route') ?: 'tickets-admin',
+    'admin_route_path' => Setting::grab('admin_route_path') ?: 'tickets-admin'
+];
+
+$main_route = $settings['main_route'];
+$main_route_path = $settings['main_route_path'];
+$admin_route = $settings['admin_route'];
+$admin_route_path = $settings['admin_route_path'];
+
+
+Route::group([
+    'middleware' => ['web', 'auth:customer'],
+    'prefix' => 'customer/tickets'
+], function () use ($main_route) {
+    Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@customerIndex')
+        ->name('customer.tickets.index');
+    Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
+        ->name('customer.tickets.create');
+    Route::post('/', 'Ticket\Ticketit\Controllers\TicketsController@store')
+        ->name('customer.tickets.store');
+});
+
+Route::group(['middleware' => \Ticket\Ticketit\Helpers\LaravelVersion::authMiddleware()], 
+    function () use ($main_route, $main_route_path, $admin_route, $admin_route_path) {
+
 
     //Route::group(['middleware' => '', function () use ($main_route) {
     //Ticket public route
