@@ -79,15 +79,15 @@ trait HasTickets
      * New functionality: Check if model can create tickets
      */
     public function canCreateTicket(): bool
-    {
-        $customerModel = Config::get('ticketit.models.customer');
-        
-        if ($this instanceof $customerModel) {
-            return Config::get('ticketit.permissions.customer.create_ticket', true);
-        }
-        
-        return Config::get('ticketit.ticket.user_can_create', true);
+{
+    $customerModel = Config::get('ticketit.models.customer');
+    
+    if ($this instanceof $customerModel) {
+        return Config::get('ticketit.permissions.customer.create_ticket', true);
     }
+    
+    return false; // Users/staff cannot create tickets
+}
 
     /**
      * New functionality: Check ticket viewing permissions
