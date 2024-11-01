@@ -2,14 +2,16 @@
 
 namespace Ticket\Ticketit\Controllers;
 
-use App\Http\Controllers\Controller;
+use Illuminate\Routing\Controller;
 use Illuminate\Http\Request;
 use Ticket\Ticketit\Models;
+use Illuminate\Support\Facades\Auth;
 
 class CommentsController extends Controller
 {
     public function __construct()
     {
+        // Keep original middleware
         $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['edit', 'update', 'destroy']]);
         $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => 'store']);
     }
@@ -49,11 +51,16 @@ class CommentsController extends Controller
         ]);
 
         $comment = new Models\Comment();
-
         $comment->setPurifiedContent($request->get('content'));
-
         $comment->ticket_id = $request->get('ticket_id');
-        $comment->user_id = \Auth::user()->id;
+
+        // appropriate user type
+        if ($this->isCustomer()) {
+            $comment->customer_id = $this->getAuthUser()->id;
+        } else {
+            $comment->user_id = $this->getAuthUser()->id;
+        }
+
         $comment->save();
 
         $ticket = Models\Ticket::find($comment->ticket_id);

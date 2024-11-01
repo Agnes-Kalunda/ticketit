@@ -17,7 +17,7 @@ A Laravel support ticket system package with dual authentication support for bot
 
 - PHP 7.1.3 or higher
 - Laravel 5.8 or higher
-- MySQL
+- MySQL 
 
 ## Installation
 
@@ -97,7 +97,7 @@ return [
     ],
 
     'ticket' => [
-        'user_can_create' => true,
+        'user_can_create' => false,
         'customer_can_create' => true,
         'agent_notify_customer' => true,
         'customer_notify_agent' => true,
@@ -110,7 +110,7 @@ return [
             'comment_own_tickets' => true,
         ],
         'user' => [
-            'view_all_tickets' => false,
+            'view_all_tickets' => true,
             'manage_tickets' => true,
             'manage_settings' => true,
         ],
