@@ -37,8 +37,17 @@ class TicketitServiceProvider extends ServiceProvider
             // Database isn't installed yet.
             return;
         }
+        try{
+            if(!Schema::hasTable('ticketit_settings')){
+                return;
+            }
+        
 
         $installer = new InstallController();
+
+        } catch(\Exception $e){
+            return;
+        }
 
         // if a migration or new setting is missing scape to the installation
         if (empty($installer->inactiveMigrations()) && !$installer->inactiveSettings()) {
