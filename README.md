@@ -16,8 +16,8 @@ A Laravel support ticket system package with dual authentication support for bot
 ## Requirements
 
 - PHP 7.1.3 or higher
-- Laravel 5.8
-- MySQL/MariaDB
+- Laravel 5.8 or higher
+- MySQL
 
 ## Installation
 
