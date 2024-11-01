@@ -32,7 +32,7 @@ return [
 
      // ticket configuration
      'ticket' => [
-        'user_can_create' => true,  // allow staff/users to create tickets
+        'user_can_create' => false,  // allow staff/users to create tickets
         'customer_can_create' => true,  // allow customers to create tickets
         'agent_notify_customer' => true,  // notify customer when agent replies
         'customer_notify_agent' => true,  // notify agent when customer replies

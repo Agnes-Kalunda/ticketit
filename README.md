@@ -1,102 +1,120 @@
-# This project is archived!
-That means no more expected updates or patches. It's a good idea to start looking for other alternatives.
+# Ticketit - Laravel Support Ticket System
 
-Thanks for everyone contributed to this project for over 6 years.
+A Laravel support ticket system package with dual authentication support for both staff members (Users) and customers. This package is designed to handle support tickets between customers and staff members efficiently.
 
-# Ticketit
+## Features
 
-A simple helpdesk tickets system for Laravel 5.1+ (5.1 – 5.8 and 6.* - 7.* - 8.*) which integrates smoothly with Laravel default users and auth system. 
-It will integrate into your current Laravel project within minutes, and you can offer your customers and your team a nice and simple support ticket system. 
+- Dual authentication system (Staff/Customers)
+- Ticket management system
+- Auto-assignment of agents
+- Ticket categories and priorities
+- Custom permission system
+- Email notifications
+- Statistics and reporting
+- Configurable settings
 
-## Features:
-1. Three main users roles users, agents, and admins
-2. Users can create tickets, keep track of their tickets status, giving comments, and close their own tickets (access permissions are configurable)
-3. Auto assigning agents to tickets, the system searches for agents in specific department and auto select the agent with lowest queue
-4. Simple admin panel 
-5. Localization (Arabic, Brazilian Portuguese, Deutsch (German), English, Farsi, French, Hungarian, Italian, Persian, Russian, and Spanish language packs are included)
-6. Very simple installation and integration process
-7. Admin dashboard with statistics and performance tracking graphs
-8. Simple text editor for tickets descriptions and comments allows images upload
+## Requirements
 
-[Full features list (12+) and screen shots](https://github.com/thekordy/ticketit/wiki/v0.2.3-Features)
+- PHP 7.1.3 or higher
+- Laravel 5.8
+- MySQL/MariaDB
 
-## Quick installation
+## Installation
 
-If you'd like to install Ticketit as a standalone app, use our [quick installer](https://gitlab.com/balping/ticketit-app). This is a Laravel application pre-configured to work with Ticketit. Using the quick installer minimises the efforts and knowledge about Laravel needed to install Ticketit.
-
-However if you'd like to include Ticketit in your existing project, skip to the [next section](#installation-manual).
-
-## Installation (manual):
-
-### Requirements
-**First Make sure you have got this Laravel setup working:**
-
-1. [Laravel 5.1+](http://laravel.com/docs#installation)
-2. [Users table](http://laravel.com/docs/authentication)
-3. [Laravel email configuration](http://laravel.com/docs/mail#sending-mail)
-4. Bootstrap 3, or Bootstrap 4
-5. Jquery
-
-**Dependents that are getting installed and configured automatically by Ticketit (no action required from you)**
-
-1. [LaravelCollective HTML](https://github.com/laravelcollective/html)
-2. [Laravel Datatables](https://github.com/yajra/laravel-datatables)
-3. [HTML Purifier](https://github.com/mewebstudio/Purifier)
-
-
-### Installation steps (4-8 minutes)
-
-
-Step 1. Run this code via your terminal (1-2 minutes)
-```shell
-composer require 'kordy/ticketit:0.*'
+1. Install via Composer:
+```bash
+composer require ticket/ticketit
 ```
 
-Step 2. After install, you have to add this line on your `config/app.php` in Service Providers section (1-2 minutes).
+2. Register the service provider in `config/app.php`:
 ```php
-Kordy\Ticketit\TicketitServiceProvider::class,
+'providers' => [
+    // ...
+    Ticket\Ticketit\TicketitServiceProvider::class,
+];
 ```
 
-Step 3. [Check if App\User exists](https://github.com/thekordy/ticketit/wiki/Make-sure-that-App%5CUser-exists)
+3. Publish the configuration and assets:
+```bash
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider"
+```
 
-Step 4. Make sure you have [authentication](https://laravel.com/docs/5.4/authentication#introduction) set up. In 5.2+, you can use `php artisan make:auth`
+4. Run the migrations:
+```bash
+php artisan migrate
+```
 
-Step 5. [Setting up your master view for Ticketit integration (1-2 minutes)](https://github.com/thekordy/ticketit/wiki/Integrating-Ticketit-views-with-your-project-template)
+## Configuration
 
-Step 6. Register at least one user into the system and log it in.
+### 1. Add HasTickets Trait
 
-Step 7. Go ahead to http://your-project-url/tickets-install to finalize the installation (1-2 minutes)
+Add the `HasTickets` trait to both your User and Customer models:
 
-Default ticketit front route: http://your-project-url/tickets
+```php
+// app/User.php
+use Ticket\Ticketit\Traits\HasTickets;
 
-Default ticketit admin route: http://your-project-url/tickets-admin
+class User extends Authenticatable
+{
+    use HasTickets;
+    // ...
+}
 
-**Notes:**
+// app/Customer.php
+use Ticket\Ticketit\Traits\HasTickets;
 
-Make sure you have created at least one status, one prority, and one category before you start creating tickets.
+class Customer extends Authenticatable
+{
+    use HasTickets;
+    // ...
+}
+```
 
-If you move your installation folder to another path (or server), you need to update the row with slug='routes' in table `ticketit_settings`. After that, don't forget to flush the entire cache.
+### 2. Configure Environment Variables
 
-## Upgrading to v0.4
+Add these to your `.env` file:
+```env
+TICKETIT_CUSTOMER_MODEL=App\Customer
+TICKETIT_USER_MODEL=App\User
+TICKETIT_CUSTOMER_GUARD=customer
+TICKETIT_USER_GUARD=web
+```
 
-After upgrading from `0.3.*` to `0.4`, visit url `http://your-project-url/tickets-upgrade`. This adds new rows to the config table automatically.
+### 3. Update Config File
 
-## Documentation
-[Ticketit Wiki](https://github.com/thekordy/ticketit/wiki)
+The `config/ticketit.php` file contains all settings:
 
-## Support:
-[Review features requests, give your feedback, suggest features, report issues](https://github.com/thekordy/ticketit/issues)
+```php
+return [
+    'models' => [
+        'customer' => env('TICKETIT_CUSTOMER_MODEL', 'App\Customer'),
+        'user' => env('TICKETIT_USER_MODEL', 'App\User'),
+    ],
 
-## Live Demo
-http://ticketit.kordy.info/tickets
+    'guards' => [
+        'customer' => env('TICKETIT_CUSTOMER_GUARD', 'customer'),
+        'user' => env('TICKETIT_USER_GUARD', 'web'),
+    ],
 
-## Project contributors (the project heros):
+    'ticket' => [
+        'user_can_create' => true,
+        'customer_can_create' => true,
+        'agent_notify_customer' => true,
+        'customer_notify_agent' => true,
+    ],
 
-Big thank you for all active people who took from their time to give their feedback and suggestions, they helped a lot to improve Ticketit for all of us.
+    'permissions' => [
+        'customer' => [
+            'create_ticket' => true,
+            'view_own_tickets' => true,
+            'comment_own_tickets' => true,
+        ],
+        'user' => [
+            'view_all_tickets' => false,
+            'manage_tickets' => true,
+            'manage_settings' => true,
+        ],
+    ],
+];
 
-https://github.com/thekordy/ticketit/graphs/contributors
-
-## Download statistics
-
-[![statistics](https://packagist-statistics.dura.hu/kordy/ticketit/10days.svg)](https://packagist-statistics.dura.hu/kordy/ticketit/10days.svg)
 
