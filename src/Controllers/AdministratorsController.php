@@ -2,25 +2,29 @@
 
 namespace Ticket\Ticketit\Controllers;
 
-use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Ticket\Ticketit\Models\Agent;
 use Ticket\Ticketit\Models\Setting;
 
-class AdministratorsController extends Controller
+class AdministratorsController extends BaseTicketController
 {
+    public function __construct()
+    {
+        // Only staff can access - using web guard
+        $this->middleware('auth:web');
+        $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware');
+    }
+
     public function index()
     {
         $administrators = Agent::admins();
-
         return view('ticketit::admin.administrator.index', compact('administrators'));
     }
 
     public function create()
     {
         $users = Agent::paginate(Setting::grab('paginate_items'));
-
         return view('ticketit::admin.administrator.create', compact('users'));
     }
 
@@ -29,7 +33,8 @@ class AdministratorsController extends Controller
         $administrators_list = $this->addAdministrators($request->input('administrators'));
         $administrators_names = implode(',', $administrators_list);
 
-        Session::flash('status', trans('ticketit::lang.administrators-are-added-to-administrators', ['names' => $administrators_names]));
+        Session::flash('status', trans('ticketit::lang.administrators-are-added-to-administrators', 
+            ['names' => $administrators_names]));
 
         return redirect()->action('\Ticket\Ticketit\Controllers\AdministratorsController@index');
     }
@@ -47,21 +52,19 @@ class AdministratorsController extends Controller
     {
         $administrator = $this->removeAdministrator($id);
 
-        Session::flash('status', trans('ticketit::lang.administrators-is-removed-from-team', ['name' => $administrator->name]));
+        Session::flash('status', trans('ticketit::lang.administrators-is-removed-from-team', 
+            ['name' => $administrator->name]));
 
         return redirect()->action('\Ticket\Ticketit\Controllers\AdministratorsController@index');
     }
 
     /**
-     * Assign users as administrators.
-     *
-     * @param $user_ids
-     *
-     * @return array
+     * Add administrators
      */
-    public function addAdministrators($user_ids)
+    protected function addAdministrators($user_ids)
     {
         $users = Agent::find($user_ids);
+        $users_list = [];
         foreach ($users as $user) {
             $user->ticketit_admin = true;
             $user->save();
@@ -72,39 +75,27 @@ class AdministratorsController extends Controller
     }
 
     /**
-     * Remove user from the administrators.
-     *
-     * @param $id
-     *
-     * @return mixed
+     * Remove administrator
      */
-    public function removeAdministrator($id)
+    protected function removeAdministrator($id)
     {
         $administrator = Agent::find($id);
         $administrator->ticketit_admin = false;
         $administrator->save();
 
-        // Remove him from tickets categories as well
-        if (version_compare(app()->version(), '5.2.0', '>=')) {
-            $administrator_cats = $administrator->categories->pluck('id')->toArray();
-        } else { // if Laravel 5.1
-            $administrator_cats = $administrator->categories->lists('id')->toArray();
-        }
-
+        $administrator_cats = $administrator->categories->pluck('id')->toArray();
         $administrator->categories()->detach($administrator_cats);
 
         return $administrator;
     }
 
     /**
-     * Sync Administrator categories with the selected categories got from update form.
-     *
-     * @param $id
-     * @param Request $request
+     * Sync categories
      */
-    public function syncAdministratorCategories($id, Request $request)
+    protected function syncAdministratorCategories($id, Request $request)
     {
-        $form_cats = ($request->input('administrator_cats') == null) ? [] : $request->input('administrator_cats');
+        $form_cats = ($request->input('administrator_cats') == null) ? [] : 
+                     $request->input('administrator_cats');
         $administrator = Agent::find($id);
         $administrator->categories()->sync($form_cats);
     }
