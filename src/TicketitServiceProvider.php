@@ -31,7 +31,7 @@ class TicketitServiceProvider extends ServiceProvider
             __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
         ], 'ticketit-config');
 
-        
+        // handle migration
         $this->publishes([
             __DIR__.'/Migrations' => database_path('migrations')
         ], 'ticketit-migrations');
