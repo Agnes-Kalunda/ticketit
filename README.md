@@ -39,10 +39,16 @@ composer require ticket/ticketit
 php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --force
 ```
 
-4. Run the migrations:
+4. Publish ticket Routes from the  package:
+```bash
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag="ticketit-routes"
+```
+
+5. Run the migrations:
 ```bash
 php artisan migrate
 ```
+
 
 ## Configuration
 

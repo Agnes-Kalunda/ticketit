@@ -26,19 +26,43 @@ class TicketitServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        // publish configurations
+    
+        $viewsDirectory = __DIR__.'/Views/bootstrap3';
+        $this->loadViewsFrom($viewsDirectory, 'ticketit');
+        $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
+
+        // Register validation msgs
+        $this->app['validator']->extend('exists_ticket', function ($attribute, $value, $parameters) {
+            return DB::table($parameters[0])->where('id', $value)->exists();
+        });
+
+        // custom validation messages
+        $this->app['validator']->replacer('exists_ticket', function ($message, $attribute, $rule, $parameters) {
+            return str_replace(':table', $parameters[0], $message);
+        });
+    
+        // Publish configurations
         $this->publishes([
             __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
         ], 'ticketit-config');
 
-        
+        // Publish migrations
         $this->publishes([
             __DIR__.'/Migrations' => database_path('migrations')
         ], 'ticketit-migrations');
 
+        // Publish routes
         $this->publishes([
             __DIR__.'/routes.php' => base_path('routes/ticketit/routes.php')
         ], 'ticketit-routes');
+
+        // Publish all assets
+        $this->publishes([
+            $viewsDirectory => base_path('resources/views/vendor/ticketit'),
+            __DIR__.'/Translations' => base_path('resources/lang/vendor/ticketit'),
+            __DIR__.'/Public' => public_path('vendor/ticketit'),
+            __DIR__.'/Config' => base_path('config'),
+        ], 'ticketit-assets');
 
         $this->loadMigrationsFrom(__DIR__.'/Migrations');
 
@@ -46,140 +70,123 @@ class TicketitServiceProvider extends ServiceProvider
             // Database isn't installed yet.
             return;
         }
+
         try{
             if(!Schema::hasTable('ticketit_settings')){
                 return;
             }
-        
+            
+            $installer = new InstallController();
 
-        $installer = new InstallController();
+            // if a migration or new setting is missing scape to the installation
+            if (empty($installer->inactiveMigrations()) && !$installer->inactiveSettings()) {
+                // Configure database connection
+                $this->setupDatabaseConnection();
+
+                // Send the Agent User model to the view under $u
+                // Send settings to views under $setting
+                //cache $u
+                $u = null;
+
+                TicketItComposer::settings($u);
+
+                // Adding HTML5 color picker to form elements
+                CollectiveForm::macro('custom', function ($type, $name, $value = '#000000', $options = []) {
+                    return CollectiveForm::input($type, $name, $value, array_merge(['class' => 'form-control'], $options));
+                });
+
+                TicketItComposer::general();
+                TicketItComposer::codeMirror();
+                TicketItComposer::sharedAssets();
+                TicketItComposer::summerNotes();
+
+                // Send notification when new comment is added
+                Comment::creating(function ($comment) {
+                    if (Setting::grab('comment_notification')) {
+                        $notification = new NotificationsController();
+                        $notification->newComment($comment);
+                    }
+                });
+
+                // Send notification when ticket status is modified
+                Ticket::updating(function ($modified_ticket) {
+                    if (Setting::grab('status_notification')) {
+                        $original_ticket = Ticket::find($modified_ticket->id);
+                        if ($original_ticket->status_id != $modified_ticket->status_id || $original_ticket->completed_at != $modified_ticket->completed_at) {
+                            $notification = new NotificationsController();
+                            $notification->ticketStatusUpdated($modified_ticket, $original_ticket);
+                        }
+                    }
+                    if (Setting::grab('assigned_notification')) {
+                        $original_ticket = Ticket::find($modified_ticket->id);
+                        if ($original_ticket->agent->id != $modified_ticket->agent->id) {
+                            $notification = new NotificationsController();
+                            $notification->ticketAgentUpdated($modified_ticket, $original_ticket);
+                        }
+                    }
+                    return true;
+                });
+
+                // Send notification when ticket is created
+                Ticket::created(function ($ticket) {
+                    if (Setting::grab('assigned_notification')) {
+                        $notification = new NotificationsController();
+                        $notification->newTicketNotifyAgent($ticket);
+                    }
+                    return true;
+                });
+
+                $main_route = Setting::grab('main_route');
+                $main_route_path = Setting::grab('main_route_path');
+                $admin_route = Setting::grab('admin_route');
+                $admin_route_path = Setting::grab('admin_route_path');
+
+                if (file_exists(Setting::grab('routes'))) {
+                    include Setting::grab('routes');
+                } else {
+                    include __DIR__.'/routes.php';
+                }
+            }
 
         } catch(\Exception $e){
+            // Handle installation routes
+            if (Request::path() == 'tickets-install'
+                    || Request::path() == 'tickets-upgrade'
+                    || Request::path() == 'tickets'
+                    || Request::path() == 'tickets-admin'
+                    || (isset($_SERVER['ARTISAN_TICKETIT_INSTALLING']) && $_SERVER['ARTISAN_TICKETIT_INSTALLING'])) {
+                
+                $this->publishes([__DIR__.'/Migrations' => base_path('database/migrations')], 'db');
+
+                $authMiddleware = LaravelVersion::authMiddleware();
+
+                Route::get('/tickets-install', [
+                    'middleware' => $authMiddleware,
+                    'as'         => 'tickets.install.index',
+                    'uses'       => 'Ticket\Ticketit\Controllers\InstallController@index',
+                ]);
+
+                Route::post('/tickets-install', [
+                    'middleware' => $authMiddleware,
+                    'as'         => 'tickets.install.setup',
+                    'uses'       => 'Ticket\Ticketit\Controllers\InstallController@setup',
+                ]);
+
+                Route::get('/tickets-upgrade', [
+                    'middleware' => $authMiddleware,
+                    'as'         => 'tickets.install.upgrade',
+                    'uses'       => 'Ticket\Ticketit\Controllers\InstallController@upgrade',
+                ]);
+
+                Route::get('/tickets', function () {
+                    return redirect()->route('tickets.install.index');
+                });
+
+                Route::get('/tickets-admin', function () {
+                    return redirect()->route('tickets.install.index');
+                });
+            }
             return;
-        }
-
-        // if a migration or new setting is missing scape to the installation
-        if (empty($installer->inactiveMigrations()) && !$installer->inactiveSettings()) {
-            // Configure database connection
-            $this->setupDatabaseConnection();
-
-            // Send the Agent User model to the view under $u
-            // Send settings to views under $setting
-            //cache $u
-            $u = null;
-
-            TicketItComposer::settings($u);
-
-            // Adding HTML5 color picker to form elements
-            CollectiveForm::macro('custom', function ($type, $name, $value = '#000000', $options = []) {
-                return CollectiveForm::input($type, $name, $value, array_merge(['class' => 'form-control'], $options));
-            });
-
-            TicketItComposer::general();
-            TicketItComposer::codeMirror();
-            TicketItComposer::sharedAssets();
-            TicketItComposer::summerNotes();
-
-            // Send notification when new comment is added
-            Comment::creating(function ($comment) {
-                if (Setting::grab('comment_notification')) {
-                    $notification = new NotificationsController();
-                    $notification->newComment($comment);
-                }
-            });
-
-            // Send notification when ticket status is modified
-            Ticket::updating(function ($modified_ticket) {
-                if (Setting::grab('status_notification')) {
-                    $original_ticket = Ticket::find($modified_ticket->id);
-                    if ($original_ticket->status_id != $modified_ticket->status_id || $original_ticket->completed_at != $modified_ticket->completed_at) {
-                        $notification = new NotificationsController();
-                        $notification->ticketStatusUpdated($modified_ticket, $original_ticket);
-                    }
-                }
-                if (Setting::grab('assigned_notification')) {
-                    $original_ticket = Ticket::find($modified_ticket->id);
-                    if ($original_ticket->agent->id != $modified_ticket->agent->id) {
-                        $notification = new NotificationsController();
-                        $notification->ticketAgentUpdated($modified_ticket, $original_ticket);
-                    }
-                }
-                return true;
-            });
-
-            // Send notification when ticket is created
-            Ticket::created(function ($ticket) {
-                if (Setting::grab('assigned_notification')) {
-                    $notification = new NotificationsController();
-                    $notification->newTicketNotifyAgent($ticket);
-                }
-                return true;
-            });
-
-            $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
-
-            $viewsDirectory = __DIR__.'/Views/bootstrap3';
-            if (Setting::grab('bootstrap_version') == '4') {
-                $viewsDirectory = __DIR__.'/Views/bootstrap4';
-            }
-
-            $this->loadViewsFrom($viewsDirectory, 'ticketit');
-
-            $this->publishes([
-                $viewsDirectory => base_path('resources/views/vendor/ticketit'),
-                __DIR__.'/Translations' => base_path('resources/lang/vendor/ticketit'),
-                __DIR__.'/Public' => public_path('vendor/ticketit'),
-                __DIR__.'/Migrations' => base_path('database/migrations'),
-                __DIR__.'/Config' => base_path('config'),
-                __DIR__.'/routes.php' => base_path('routes/ticketit/routes.php')
-            ], 'ticketit');
-
-            $main_route = Setting::grab('main_route');
-            $main_route_path = Setting::grab('main_route_path');
-            $admin_route = Setting::grab('admin_route');
-            $admin_route_path = Setting::grab('admin_route_path');
-
-            if (file_exists(Setting::grab('routes'))) {
-                include Setting::grab('routes');
-            } else {
-                include __DIR__.'/routes.php';
-            }
-        } elseif (Request::path() == 'tickets-install'
-                || Request::path() == 'tickets-upgrade'
-                || Request::path() == 'tickets'
-                || Request::path() == 'tickets-admin'
-                || (isset($_SERVER['ARTISAN_TICKETIT_INSTALLING']) && $_SERVER['ARTISAN_TICKETIT_INSTALLING'])) {
-            $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
-            $this->loadViewsFrom(__DIR__.'/Views/bootstrap3', 'ticketit');
-            $this->publishes([__DIR__.'/Migrations' => base_path('database/migrations')], 'db');
-
-            $authMiddleware = LaravelVersion::authMiddleware();
-
-            Route::get('/tickets-install', [
-                'middleware' => $authMiddleware,
-                'as'         => 'tickets.install.index',
-                'uses'       => 'Ticket\Ticketit\Controllers\InstallController@index',
-            ]);
-
-            Route::post('/tickets-install', [
-                'middleware' => $authMiddleware,
-                'as'         => 'tickets.install.setup',
-                'uses'       => 'Ticket\Ticketit\Controllers\InstallController@setup',
-            ]);
-
-            Route::get('/tickets-upgrade', [
-                'middleware' => $authMiddleware,
-                'as'         => 'tickets.install.upgrade',
-                'uses'       => 'Ticket\Ticketit\Controllers\InstallController@upgrade',
-            ]);
-
-            Route::get('/tickets', function () {
-                return redirect()->route('tickets.install.index');
-            });
-
-            Route::get('/tickets-admin', function () {
-                return redirect()->route('tickets.install.index');
-            });
         }
     }
 
@@ -190,6 +197,10 @@ class TicketitServiceProvider extends ServiceProvider
      */
     public function register()
     {
+        // Register views again to ensure availability
+        $viewsPath = __DIR__.'/Views/bootstrap3';
+        $this->loadViewsFrom($viewsPath, 'ticketit');
+
         // Register the config
         $this->mergeConfigFrom(
             __DIR__.'/Config/ticketit.php', 'ticketit'
