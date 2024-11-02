@@ -246,7 +246,12 @@ class TicketsController extends Controller
     }
 
     list($priorities, $categories) = $this->PCS();
-    return view('ticketit::tickets.create_customer', compact('priorities', 'categories'));
+    
+    return view('ticketit::tickets.create_customer', [
+        'priorities' => $priorities,
+        'categories' => $categories,
+        'master' => 'layouts.app'  // Your master layout path
+    ]);
 }
 
     /**
