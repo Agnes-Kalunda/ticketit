@@ -36,6 +36,10 @@ class TicketitServiceProvider extends ServiceProvider
             __DIR__.'/Migrations' => database_path('migrations')
         ], 'ticketit-migrations');
 
+        $this->publishes([
+            __DIR__.'/routes.php' => base_path('routes/ticketit/routes.php')
+        ], 'ticketit-routes');
+
         $this->loadMigrationsFrom(__DIR__.'/Migrations');
 
         if (!Schema::hasTable('migrations')) {
@@ -126,7 +130,8 @@ class TicketitServiceProvider extends ServiceProvider
                 __DIR__.'/Translations' => base_path('resources/lang/vendor/ticketit'),
                 __DIR__.'/Public' => public_path('vendor/ticketit'),
                 __DIR__.'/Migrations' => base_path('database/migrations'),
-                __DIR__.'/Config' => base_path('config')
+                __DIR__.'/Config' => base_path('config'),
+                __DIR__.'/routes.php' => base_path('routes/ticketit/routes.php')
             ], 'ticketit');
 
             $main_route = Setting::grab('main_route');
