@@ -277,35 +277,133 @@ class TicketsController extends Controller
      * @return array
      */
     protected function PCS()
-    {
-        $time = LaravelVersion::min('5.8') ? 60*60 : 60;
+{
+    $time = LaravelVersion::min('5.8') ? 60*60 : 60;
 
+    try {
+        // Get priorities
         $priorities = Cache::remember('ticketit::priorities', $time, function () {
-            return Models\Priority::all();
+            return Models\Priority::orderBy('name')->get();
         });
 
+        // Get categories
         $categories = Cache::remember('ticketit::categories', $time, function () {
-            return Models\Category::all();
+            return Models\Category::orderBy('name')->get();
         });
 
+        // Get statuses
         $statuses = Cache::remember('ticketit::statuses', $time, function () {
-            return Models\Status::all();
+            return Models\Status::orderBy('name')->get();
         });
 
-        if (LaravelVersion::min('5.3.0')) {
-            return [
-                $priorities->pluck('name', 'id'),
-                $categories->pluck('name', 'id'),
-                $statuses->pluck('name', 'id')
-            ];
+        // First check if there's data
+        if ($priorities->isEmpty() && $categories->isEmpty()) {
+            // Seed some default data
+            $this->seedDefaultData();
+            
+            // Fetch again
+            $priorities = Models\Priority::orderBy('name')->get();
+            $categories = Models\Category::orderBy('name')->get();
+            $statuses = Models\Status::orderBy('name')->get();
         }
 
         return [
-            $priorities->lists('name', 'id'),
-            $categories->lists('name', 'id'),
-            $statuses->lists('name', 'id')
+            $priorities->pluck('name', 'id'),
+            $categories->pluck('name', 'id'),
+            $statuses->pluck('name', 'id')
         ];
+
+    } catch (\Exception $e) {
+        Log::error('Error in PCS method: ' . $e->getMessage());
+        return [collect([]), collect([]), collect([])];
     }
+}
+
+
+    protected function seedDefaultData()
+{
+        try {
+        // Seed default priorities if none exist
+            if (Models\Priority::count() === 0) {
+                Models\Priority::insert([
+                    [
+                        'name' => 'Low',
+                        'color' => '#069900',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Medium',
+                        'color' => '#e1d200',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'High',
+                        'color' => '#e10000',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ]
+            ]);
+        }
+
+        // Seed default categories if none exist
+            if (Models\Category::count() === 0) {
+                Models\Category::insert([
+                 [
+                        'name' => 'Technical',
+                        'color' => '#0014f4',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Billing',
+                        'color' => '#2b9900',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Customer Service',
+                        'color' => '#7e0099',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ]
+            ]);
+        }
+
+        // Seed default statuses if none exist
+            if (Models\Status::count() === 0) {
+                Models\Status::insert([
+                [
+                        'name' => 'Open',
+                        'color' => '#f39c12',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'In Progress',
+                        'color' => '#3498db',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Closed',
+                        'color' => '#2ecc71',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ]
+            ]);
+        }
+
+        // Clear the cache after seeding
+            Cache::forget('ticketit::priorities');
+            Cache::forget('ticketit::categories');
+            Cache::forget('ticketit::statuses');
+
+     } catch (\Exception $e) {
+            Log::error('Error seeding default data: ' . $e->getMessage());
+    }
+}
 
     /**
      * Show create ticket form
@@ -313,20 +411,25 @@ class TicketsController extends Controller
      * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
     public function create()
-    {
-        if (!$this->isCustomer()) {
-            return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
-        }
-
-        list($priorities, $categories) = $this->PCS();
-        
-        return view('ticketit::tickets.create_customer', [
-            'priorities' => $priorities,
-            'categories' => $categories,
-            'master' => 'layouts.app'
-        ]);
+{
+    if (!$this->isCustomer()) {
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('warning', 'Staff members cannot create tickets');
     }
+
+    // Check if we have categories and priorities, if not seed them
+    if (Models\Category::count() === 0 || Models\Priority::count() === 0) {
+        $this->seedDefaultData();
+    }
+
+    list($priorities, $categories) = $this->PCS();
+    
+    return view('ticketit::tickets.create_customer', [
+        'priorities' => $priorities,
+        'categories' => $categories,
+        'master' => 'layouts.app'
+    ]);
+}
 
     /**
      * Store a new ticket
