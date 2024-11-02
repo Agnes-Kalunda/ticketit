@@ -36,8 +36,7 @@ composer require ticket/ticketit
 
 3. Publish the configuration and assets:
 ```bash
-php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag="ticketit-config"
-php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag="ticketit"
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --force
 ```
 
 4. Run the migrations:
