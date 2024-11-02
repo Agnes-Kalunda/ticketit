@@ -2,27 +2,33 @@
 
 namespace Ticket\Ticketit\Controllers;
 
-
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Ticket\Ticketit\Helpers\LaravelVersion;
 use Ticket\Ticketit\Models;
 use Ticket\Ticketit\Models\Agent;
 use Ticket\Ticketit\Models\Category;
 use Ticket\Ticketit\Models\Setting;
 use Ticket\Ticketit\Models\Ticket;
+use Ticket\Ticketit\Models\Status;
+use Ticket\Ticketit\Models\Priority;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Routing\Controller;
-
-
 
 class TicketsController extends Controller
 {
     protected $tickets;
     protected $agent;
 
+    /**
+     * TicketsController constructor.
+     *
+     * @param Ticket $tickets
+     * @param Agent $agent
+     */
     public function __construct(Ticket $tickets, Agent $agent)
     {
         $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
@@ -34,7 +40,9 @@ class TicketsController extends Controller
     }
 
     /**
-     * determine if the current user is a customer
+     * Determine if the current user is a customer
+     *
+     * @return bool
      */
     protected function isCustomer()
     {
@@ -42,7 +50,9 @@ class TicketsController extends Controller
     }
 
     /**
-     * get authenticated user (either customer or user)
+     * Get authenticated user (either customer or user)
+     *
+     * @return \Illuminate\Contracts\Auth\Authenticatable|null
      */
     protected function getAuthUser()
     {
@@ -52,7 +62,33 @@ class TicketsController extends Controller
         return Auth::user();
     }
 
+    /**
+     * Display customer tickets index
+     *
+     * @return \Illuminate\View\View
+     */
+    public function customerIndex()
+    {
+        if (!$this->isCustomer()) {
+            return redirect()->route('home')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
+        }
 
+        $tickets = $this->tickets
+            ->where('customer_id', $this->getAuthUser()->id)
+            ->with(['status', 'priority', 'category', 'agent'])
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+
+        return view('ticketit::tickets.index_customer', compact('tickets'));
+    }
+
+    /**
+     * Get table data for datatables
+     *
+     * @param bool $complete
+     * @return mixed
+     */
     public function data($complete = false)
     {
         if (LaravelVersion::min('5.4')) {
@@ -61,41 +97,82 @@ class TicketsController extends Controller
             $datatables = app(\Yajra\Datatables\Datatables::class);
         }
 
-        $collection = null;
+        $collection = $this->getTicketCollection($complete);
+        $collection = $this->joinTicketTables($collection);
+        $collection = $datatables->of($collection);
 
-        if ($this->isCustomer()) {
-            // Customers only see their own tickets
-            $collection = $this->tickets->where('customer_id', $this->getAuthUser()->id);
-            if ($complete) {
-                $collection = $collection->complete();
-            } else {
-                $collection = $collection->active();
-            }
-        } else {
-            $user = $this->agent->find(auth()->user()->id);
+        $this->renderTicketTable($collection);
 
-            if ($user->isAdmin()) {
-                if ($complete) {
-                    $collection = Ticket::complete();
-                } else {
-                    $collection = Ticket::active();
-                }
-            } elseif ($user->isAgent()) {
-                if ($complete) {
-                    $collection = Ticket::complete()->agentUserTickets($user->id);
-                } else {
-                    $collection = Ticket::active()->agentUserTickets($user->id);
-                }
-            } else {
-                if ($complete) {
-                    $collection = Ticket::userTickets($user->id)->complete();
-                } else {
-                    $collection = Ticket::userTickets($user->id)->active();
-                }
-            }
+        $collection->editColumn('updated_at', '{!! \Carbon\Carbon::parse($updated_at)->diffForHumans() !!}');
+
+        if (LaravelVersion::min('5.4')) {
+            $collection->rawColumns(['subject', 'status', 'priority', 'category', 'agent']);
         }
 
-        $collection = $collection->join('ticketit_statuses', 'ticketit_statuses.id', '=', 'ticketit.status_id')
+        return $collection->make(true);
+    }
+
+    /**
+     * Get the base ticket collection based on user type
+     *
+     * @param bool $complete
+     * @return mixed
+     */
+    protected function getTicketCollection($complete = false)
+    {
+        if ($this->isCustomer()) {
+            return $this->getCustomerTickets($complete);
+        }
+
+        return $this->getStaffTickets($complete);
+    }
+
+    /**
+     * Get customer specific tickets
+     *
+     * @param bool $complete
+     * @return mixed
+     */
+    protected function getCustomerTickets($complete)
+    {
+        $tickets = $this->tickets->where('customer_id', $this->getAuthUser()->id);
+        return $complete ? $tickets->complete() : $tickets->active();
+    }
+
+    /**
+     * Get staff specific tickets
+     *
+     * @param bool $complete
+     * @return mixed
+     */
+    protected function getStaffTickets($complete)
+    {
+        $user = $this->agent->find(auth()->user()->id);
+
+        if ($user->isAdmin()) {
+            return $complete ? Ticket::complete() : Ticket::active();
+        }
+
+        if ($user->isAgent()) {
+            return $complete ? 
+                Ticket::complete()->agentUserTickets($user->id) : 
+                Ticket::active()->agentUserTickets($user->id);
+        }
+
+        return $complete ? 
+            Ticket::userTickets($user->id)->complete() : 
+            Ticket::userTickets($user->id)->active();
+    }
+
+    /**
+     * Join ticket tables for datatables
+     *
+     * @param mixed $collection
+     * @return mixed
+     */
+    protected function joinTicketTables($collection)
+    {
+        return $collection->join('ticketit_statuses', 'ticketit_statuses.id', '=', 'ticketit.status_id')
             ->join('ticketit_priorities', 'ticketit_priorities.id', '=', 'ticketit.priority_id')
             ->join('ticketit_categories', 'ticketit_categories.id', '=', 'ticketit.category_id')
             ->leftJoin('users', 'users.id', '=', 'ticketit.user_id')
@@ -117,26 +194,19 @@ class TicketsController extends Controller
                 'ticketit.customer_id',
                 'ticketit.user_id'
             ]);
-
-        $collection = $datatables->of($collection);
-
-        $this->renderTicketTable($collection);
-
-        $collection->editColumn('updated_at', '{!! \Carbon\Carbon::parse($updated_at)->diffForHumans() !!}');
-
-        if (LaravelVersion::min('5.4')) {
-            $collection->rawColumns(['subject', 'status', 'priority', 'category', 'agent']);
-        }
-
-        return $collection->make(true);
     }
 
-
+    /**
+     * Render ticket table
+     *
+     * @param mixed $collection
+     * @return mixed
+     */
     public function renderTicketTable($collection)
     {
         $collection->editColumn('subject', function ($ticket) {
             return (string) link_to_route(
-                $this->isCustomer() ? 'customer.ticketit.show' : Setting::grab('main_route').'.show',
+                $this->isCustomer() ? 'customer.tickets.show' : Setting::grab('main_route').'.show',
                 $ticket->subject,
                 $ticket->id
             );
@@ -165,7 +235,6 @@ class TicketsController extends Controller
             return e($ticket->agent->name);
         });
 
-        // add customer name column for staff view
         if (!$this->isCustomer()) {
             $collection->editColumn('customer_name', function ($ticket) {
                 return $ticket->customer_id ? e($ticket->customer_name) : 'N/A';
@@ -175,11 +244,10 @@ class TicketsController extends Controller
         return $collection;
     }
 
-
     /**
-     * Display a listing of active tickets related to user.
+     * Display index page
      *
-     * @return Response
+     * @return \Illuminate\View\View
      */
     public function index()
     {
@@ -189,14 +257,14 @@ class TicketsController extends Controller
     }
 
     /**
-     * Display a listing of completed tickets related to user.
+     * Display completed tickets
      *
-     * @return Response
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
     public function indexComplete()
     {
         if ($this->isCustomer()) {
-            return redirect()->route('customer.ticketit.index');
+            return redirect()->route('customer.tickets.index');
         }
         
         $complete = true;
@@ -204,8 +272,7 @@ class TicketsController extends Controller
     }
 
     /**
-     * Returns priorities, categories and statuses lists in this order
-     * Decouple it with list().
+     * Returns priorities, categories and statuses lists
      *
      * @return array
      */
@@ -226,55 +293,66 @@ class TicketsController extends Controller
         });
 
         if (LaravelVersion::min('5.3.0')) {
-            return [$priorities->pluck('name', 'id'), $categories->pluck('name', 'id'), $statuses->pluck('name', 'id')];
-        } else {
-            return [$priorities->lists('name', 'id'), $categories->lists('name', 'id'), $statuses->lists('name', 'id')];
+            return [
+                $priorities->pluck('name', 'id'),
+                $categories->pluck('name', 'id'),
+                $statuses->pluck('name', 'id')
+            ];
         }
+
+        return [
+            $priorities->lists('name', 'id'),
+            $categories->lists('name', 'id'),
+            $statuses->lists('name', 'id')
+        ];
     }
 
-
     /**
-     * Show the form for creating a new resource.
+     * Show create ticket form
      *
-     * @return Response
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
     public function create()
-{
-    if (!$this->isCustomer()) {
-        return redirect()->route(Setting::grab('main_route').'.index')
-            ->with('warning', 'Staff members cannot create tickets');
+    {
+        if (!$this->isCustomer()) {
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+        }
+
+        list($priorities, $categories) = $this->PCS();
+        
+        return view('ticketit::tickets.create_customer', [
+            'priorities' => $priorities,
+            'categories' => $categories,
+            'master' => 'layouts.app'
+        ]);
     }
 
-    list($priorities, $categories) = $this->PCS();
-    
-    return view('ticketit::tickets.create_customer', [
-        'priorities' => $priorities,
-        'categories' => $categories,
-        'master' => 'layouts.app'  // Your master layout path
-    ]);
-}
-
     /**
-     * Store a newly created ticket and auto assign an agent for it.
+     * Store a new ticket
      *
      * @param Request $request
-     *
      * @return \Illuminate\Http\RedirectResponse
      */
     public function store(Request $request)
     {
-
         if (!$this->isCustomer()) {
             return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', 'Staff members cannot create tickets');
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
         }
-        
-        $this->validate($request, [
-            'subject'     => 'required|min:3',
-            'content'     => 'required|min:6',
+
+        $validator = Validator::make($request->all(), [
+            'subject' => 'required|min:3',
+            'content' => 'required|min:6',
             'priority_id' => 'required|exists:ticketit_priorities,id',
             'category_id' => 'required|exists:ticketit_categories,id',
         ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
 
         try {
             $ticket = new Ticket();
@@ -283,47 +361,42 @@ class TicketsController extends Controller
             $ticket->priority_id = $request->priority_id;
             $ticket->category_id = $request->category_id;
             $ticket->status_id = Setting::grab('default_status_id');
-
-            // Set creator based on auth type
-            if ($this->isCustomer()) {
-                $ticket->customer_id = $this->getAuthUser()->id;
-            } else {
-                $ticket->user_id = $this->getAuthUser()->id;
-            }
-
+            $ticket->customer_id = $this->getAuthUser()->id;
             $ticket->autoSelectAgent();
             $ticket->save();
 
-            session()->flash('status', trans('ticketit::lang.the-ticket-has-been-created'));
-            
-            return redirect()->route(
-                $this->isCustomer() ? 'customer.ticketit.index' : Setting::grab('main_route').'.index'
-            );
+            return redirect()->route('customer.tickets.index')
+                ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
+                
         } catch (\Exception $e) {
             Log::error('Ticket creation failed: ' . $e->getMessage());
-            session()->flash('error', 'Failed to create ticket. Please try again.');
-            return back()->withInput();
+            return redirect()->back()
+                ->with('error', trans('ticketit::lang.ticket-creation-error'))
+                ->withInput();
         }
     }
 
-
     /**
-     * Display the specified resource.
+     * Display ticket
      *
      * @param int $id
-     *
-     * @return Response
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
     public function show($id)
     {
         $ticket = $this->tickets->findOrFail($id);
 
-        // Check permissions
         if ($this->isCustomer()) {
             if ($ticket->customer_id != $this->getAuthUser()->id) {
-                return redirect()->route('customer.ticketit.index')
+                return redirect()->route('customer.tickets.index')
                     ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
             }
+
+            $comments = $ticket->comments()
+                ->orderBy('created_at', 'desc')
+                ->paginate(Setting::grab('paginate_items'));
+            
+            return view('ticketit::tickets.show_customer', compact('ticket', 'comments'));
         }
 
         list($priority_lists, $category_lists, $status_lists) = $this->PCS();
@@ -336,37 +409,33 @@ class TicketsController extends Controller
 
         $comments = $ticket->comments()->paginate(Setting::grab('paginate_items'));
 
-        $view = $this->isCustomer() ? 'ticketit::tickets.show_customer' : 'ticketit::tickets.show';
-
-        return view($view, compact(
+        return view('ticketit::tickets.show', compact(
             'ticket', 'status_lists', 'priority_lists', 'category_lists',
             'agent_lists', 'comments', 'close_perm', 'reopen_perm'
         ));
     }
 
-
     /**
-     * Update the specified resource in storage.
+     * Update ticket
      *
      * @param Request $request
-     * @param int     $id
-     *
-     * @return Response
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function update(Request $request, $id)
     {
         if ($this->isCustomer()) {
-            return redirect()->route('customer.ticketit.index')
+            return redirect()->route('customer.tickets.index')
                 ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
         }
 
         $this->validate($request, [
-            'subject'     => 'required|min:3',
-            'content'     => 'required|min:6',
+            'subject' => 'required|min:3',
+            'content' => 'required|min:6',
             'priority_id' => 'required|exists:ticketit_priorities,id',
             'category_id' => 'required|exists:ticketit_categories,id',
-            'status_id'   => 'required|exists:ticketit_statuses,id',
-            'agent_id'    => 'required',
+            'status_id' => 'required|exists:ticketit_statuses,id',
+            'agent_id' => 'required',
         ]);
 
         $ticket = $this->tickets->findOrFail($id);
@@ -385,15 +454,15 @@ class TicketsController extends Controller
 
         $ticket->save();
 
-        session()->flash('status', trans('ticketit::lang.the-ticket-has-been-modified'));
-        return redirect()->route(Setting::grab('main_route').'.show', $id);
+        return redirect()->route(Setting::grab('main_route').'.show', $id)
+            ->with('status', trans('ticketit::lang.the-ticket-has-been-modified'));
     }
+
     /**
-     * Remove the specified resource from storage.
+     * Delete ticket
      *
      * @param int $id
-     *
-     * @return Response
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function destroy($id)
     {
@@ -401,16 +470,15 @@ class TicketsController extends Controller
         $subject = $ticket->subject;
         $ticket->delete();
 
-        session()->flash('status', trans('ticketit::lang.the-ticket-has-been-deleted', ['name' => $subject]));
-        return redirect()->route(Setting::grab('main_route').'.index');
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('status', trans('ticketit::lang.the-ticket-has-been-deleted', ['name' => $subject]));
     }
 
     /**
-     * Mark ticket as complete.
+     * Complete ticket
      *
      * @param int $id
-     *
-     * @return Response
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function complete($id)
     {
@@ -422,22 +490,22 @@ class TicketsController extends Controller
                 $ticket->status_id = Setting::grab('default_close_status_id');
             }
 
-            $subject = $ticket->subject;
             $ticket->save();
 
-            session()->flash('status', trans('ticketit::lang.the-ticket-has-been-completed', ['name' => $subject]));
-            return redirect()->route(Setting::grab('main_route').'.index');
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('status', trans('ticketit::lang.the-ticket-has-been-completed', 
+                    ['name' => $ticket->subject]));
         }
 
         return redirect()->route(Setting::grab('main_route').'.index')
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
     }
+
     /**
-     * Reopen ticket from complete status.
+     * Reopen ticket
      *
      * @param int $id
-     *
-     * @return Response
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function reopen($id)
     {
@@ -449,24 +517,28 @@ class TicketsController extends Controller
                 $ticket->status_id = Setting::grab('default_reopen_status_id');
             }
 
-            $subject = $ticket->subject;
             $ticket->save();
 
-            session()->flash('status', trans('ticketit::lang.the-ticket-has-been-reopened', ['name' => $subject]));
-            return redirect()->route(Setting::grab('main_route').'.index');
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('status', trans('ticketit::lang.the-ticket-has-been-reopened', 
+                    ['name' => $ticket->subject]));
         }
 
         return redirect()->route(Setting::grab('main_route').'.index')
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
     }
+
+    /**
+     * Get agent select list HTML
+     *
+     * @param int $category_id
+     * @param int $ticket_id
+     * @return string
+     */
     public function agentSelectList($category_id, $ticket_id)
     {
         $cat_agents = Models\Category::find($category_id)->agents()->agentsLists();
-        if (is_array($cat_agents)) {
-            $agents = ['auto' => 'Auto Select'] + $cat_agents;
-        } else {
-            $agents = ['auto' => 'Auto Select'];
-        }
+        $agents = is_array($cat_agents) ? ['auto' => 'Auto Select'] + $cat_agents : ['auto' => 'Auto Select'];
 
         $selected_Agent = $this->tickets->find($ticket_id)->agent->id;
         $select = '<select class="form-control" id="agent_id" name="agent_id">';
@@ -480,9 +552,10 @@ class TicketsController extends Controller
     }
 
     /**
-     * @param $id
+     * Check permission to close ticket
      *
-     * @return bool
+     * @param int $id
+     * @return string
      */
     public function permToClose($id)
     {
@@ -502,18 +575,22 @@ class TicketsController extends Controller
     }
 
     /**
-     * @param $id
+     * Check permission to reopen ticket
      *
-     * @return bool
+     * @param int $id
+     * @return string
      */
     public function permToReopen($id)
     {
         $reopen_ticket_perm = Setting::grab('reopen_ticket_perm');
+        
         if ($this->agent->isAdmin() && $reopen_ticket_perm['admin'] == 'yes') {
             return 'yes';
-        } elseif ($this->agent->isAgent() && $reopen_ticket_perm['agent'] == 'yes') {
+        } 
+        if ($this->agent->isAgent() && $reopen_ticket_perm['agent'] == 'yes') {
             return 'yes';
-        } elseif ($this->agent->isTicketOwner($id) && $reopen_ticket_perm['owner'] == 'yes') {
+        } 
+        if ($this->agent->isTicketOwner($id) && $reopen_ticket_perm['owner'] == 'yes') {
             return 'yes';
         }
 
@@ -521,15 +598,16 @@ class TicketsController extends Controller
     }
 
     /**
-     * Calculate average closing period of days per category for number of months.
+     * Calculate monthly performance
      *
      * @param int $period
-     *
-     * @return \Illuminate\Database\Eloquent\Collection|static[]
+     * @return array
      */
     public function monthlyPerfomance($period = 2)
     {
         $categories = Category::all();
+        $records = ['categories' => []];
+
         foreach ($categories as $cat) {
             $records['categories'][] = $cat->name;
         }
@@ -538,13 +616,17 @@ class TicketsController extends Controller
             $from = Carbon::now();
             $from->day = 1;
             $from->subMonth($m);
+            
             $to = Carbon::now();
             $to->day = 1;
             $to->subMonth($m);
             $to->endOfMonth();
+            
             $records['interval'][$from->format('F Y')] = [];
+            
             foreach ($categories as $cat) {
-                $records['interval'][$from->format('F Y')][] = round($this->intervalPerformance($from, $to, $cat->id), 1);
+                $records['interval'][$from->format('F Y')][] = 
+                    round($this->intervalPerformance($from, $to, $cat->id), 1);
             }
         }
 
@@ -552,10 +634,9 @@ class TicketsController extends Controller
     }
 
     /**
-     * Calculate the date length it took to solve a ticket.
+     * Calculate ticket performance
      *
      * @param Ticket $ticket
-     *
      * @return int|false
      */
     public function ticketPerformance($ticket)
@@ -566,39 +647,59 @@ class TicketsController extends Controller
 
         $created = new Carbon($ticket->created_at);
         $completed = new Carbon($ticket->completed_at);
-        $length = $created->diff($completed)->days;
-
-        return $length;
+        
+        return $created->diff($completed)->days;
     }
 
     /**
-     * Calculate the average date length it took to solve tickets within date period.
+     * Calculate interval performance
      *
-     * @param $from
-     * @param $to
-     *
-     * @return int
+     * @param Carbon $from
+     * @param Carbon $to
+     * @param int|bool $cat_id
+     * @return float|false
      */
     public function intervalPerformance($from, $to, $cat_id = false)
     {
+        $query = Ticket::whereBetween('completed_at', [$from, $to]);
+        
         if ($cat_id) {
-            $tickets = Ticket::where('category_id', $cat_id)->whereBetween('completed_at', [$from, $to])->get();
-        } else {
-            $tickets = Ticket::whereBetween('completed_at', [$from, $to])->get();
+            $query->where('category_id', $cat_id);
         }
 
-        if (empty($tickets->first())) {
+        $tickets = $query->get();
+
+        if ($tickets->isEmpty()) {
             return false;
         }
 
         $performance_count = 0;
         $counter = 0;
+
         foreach ($tickets as $ticket) {
             $performance_count += $this->ticketPerformance($ticket);
             $counter++;
         }
-        $performance_average = $performance_count / $counter;
 
-        return $performance_average;
+        return $performance_count / $counter;
+    }
+
+    /**
+     * Get validation messages
+     *
+     * @return array
+     */
+    protected function getValidationMessages()
+    {
+        return [
+            'subject.required' => trans('ticketit::lang.validation.subject.required'),
+            'subject.min' => trans('ticketit::lang.validation.subject.min'),
+            'content.required' => trans('ticketit::lang.validation.content.required'),
+            'content.min' => trans('ticketit::lang.validation.content.min'),
+            'priority_id.required' => trans('ticketit::lang.validation.priority_id.required'),
+            'priority_id.exists' => trans('ticketit::lang.validation.priority_id.exists'),
+            'category_id.required' => trans('ticketit::lang.validation.category_id.required'),
+            'category_id.exists' => trans('ticketit::lang.validation.category_id.exists'),
+        ];
     }
 }

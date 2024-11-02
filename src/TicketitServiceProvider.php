@@ -31,6 +31,16 @@ class TicketitServiceProvider extends ServiceProvider
         $this->loadViewsFrom($viewsDirectory, 'ticketit');
         $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
 
+        // Register validation msgs
+        $this->app['validator']->extend('exists_ticket', function ($attribute, $value, $parameters) {
+            return DB::table($parameters[0])->where('id', $value)->exists();
+        });
+
+        // custom validation messages
+        $this->app['validator']->replacer('exists_ticket', function ($message, $attribute, $rule, $parameters) {
+            return str_replace(':table', $parameters[0], $message);
+        });
+    
         // Publish configurations
         $this->publishes([
             __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),

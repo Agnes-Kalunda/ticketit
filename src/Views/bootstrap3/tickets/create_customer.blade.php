@@ -3,10 +3,10 @@
 @section('content')
 <div class="container">
     <div class="row justify-content-center">
-        <div class="col-md-10">
+        <div class="col-md-8">
             <div class="card">
                 <div class="card-header">
-                    {{ trans('ticketit::lang.create-ticket-title') }}
+                    {{ trans('ticketit::lang.create-new-ticket') }}
                 </div>
 
                 <div class="card-body">
@@ -18,8 +18,11 @@
                                 {{ trans('ticketit::lang.subject') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
-                                <input type="text" class="form-control @error('subject') is-invalid @enderror" 
-                                       name="subject" value="{{ old('subject') }}" required>
+                                <input type="text" 
+                                       class="form-control @error('subject') is-invalid @enderror" 
+                                       name="subject" 
+                                       value="{{ old('subject') }}" 
+                                       required>
                                 <small class="form-text text-muted">
                                     {{ trans('ticketit::lang.create-ticket-brief-issue') }}
                                 </small>
@@ -36,10 +39,13 @@
                                 {{ trans('ticketit::lang.category') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
-                                <select name="category_id" class="form-control @error('category_id') is-invalid @enderror" required>
+                                <select name="category_id" 
+                                        class="form-control @error('category_id') is-invalid @enderror" 
+                                        required>
                                     <option value="">{{ trans('ticketit::lang.select-category') }}</option>
                                     @foreach($categories as $id => $name)
-                                        <option value="{{ $id }}" {{ old('category_id') == $id ? 'selected' : '' }}>
+                                        <option value="{{ $id }}" 
+                                                {{ old('category_id') == $id ? 'selected' : '' }}>
                                             {{ $name }}
                                         </option>
                                     @endforeach
@@ -57,10 +63,13 @@
                                 {{ trans('ticketit::lang.priority') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
-                                <select name="priority_id" class="form-control @error('priority_id') is-invalid @enderror" required>
+                                <select name="priority_id" 
+                                        class="form-control @error('priority_id') is-invalid @enderror" 
+                                        required>
                                     <option value="">{{ trans('ticketit::lang.select-priority') }}</option>
                                     @foreach($priorities as $id => $name)
-                                        <option value="{{ $id }}" {{ old('priority_id') == $id ? 'selected' : '' }}>
+                                        <option value="{{ $id }}" 
+                                                {{ old('priority_id') == $id ? 'selected' : '' }}>
                                             {{ $name }}
                                         </option>
                                     @endforeach
@@ -79,7 +88,9 @@
                             </label>
                             <div class="col-md-8">
                                 <textarea class="form-control @error('content') is-invalid @enderror" 
-                                          name="content" rows="5" required>{{ old('content') }}</textarea>
+                                          name="content" 
+                                          rows="5" 
+                                          required>{{ old('content') }}</textarea>
                                 <small class="form-text text-muted">
                                     {{ trans('ticketit::lang.create-ticket-describe-issue') }}
                                 </small>
