@@ -13,15 +13,26 @@
                 </div>
 
                 <div class="card-body">
+                    {{-- Status Messages --}}
                     @if(session('status'))
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
                             {{ session('status') }}
                             <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                                <span aria-hidden="true">{{ trans('ticketit::lang.flash-x') }}</span>
+                                <span aria-hidden="true">&times;</span>
                             </button>
                         </div>
                     @endif
 
+                    @if(session('error'))
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            {{ session('error') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    @endif
+
+                    {{-- Tickets Table --}}
                     @if($tickets->isEmpty())
                         <div class="text-center text-muted my-4">
                             <p>{{ trans('ticketit::lang.table-empty') }}</p>
@@ -40,42 +51,60 @@
                                         <th>{{ trans('ticketit::lang.table-priority') }}</th>
                                         <th>{{ trans('ticketit::lang.table-category') }}</th>
                                         <th>{{ trans('ticketit::lang.table-last-updated') }}</th>
+                                        <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach($tickets as $ticket)
                                         <tr>
+                                            <td>#{{ $ticket->id }}</td>
                                             <td>
-                                                #{{ $ticket->id }}
-                                            </td>
-                                            <td>
-                                                <a href="{{ route('customer.tickets.show', $ticket->id) }}">
-                                                    {{ $ticket->subject }}
+                                                <a href="{{ route('customer.tickets.show', $ticket->id) }}" class="text-decoration-none">
+                                                    {{ Str::limit($ticket->subject, 40) }}
                                                 </a>
                                             </td>
                                             <td>
-                                                @if($ticket->status)
-                                                    <span class="badge text-white" style="background-color: {{ $ticket->status->color }}">
-                                                        {{ $ticket->status->name }}
-                                                    </span>
+                                                @php
+                                                    $statusColor = $ticket->status ? $ticket->status->color : '#666666';
+                                                    $statusName = $ticket->status ? $ticket->status->name : 'Not Set';
+                                                @endphp
+                                                <span class="badge text-white" style="background-color: {{ $statusColor }}">
+                                                    {{ $statusName }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @php
+                                                    $priorityColor = $ticket->priority ? $ticket->priority->color : '#666666';
+                                                    $priorityName = $ticket->priority ? $ticket->priority->name : 'Not Set';
+                                                @endphp
+                                                <span class="badge text-white" style="background-color: {{ $priorityColor }}">
+                                                    {{ $priorityName }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @php
+                                                    $categoryColor = $ticket->category ? $ticket->category->color : '#666666';
+                                                    $categoryName = $ticket->category ? $ticket->category->name : 'Not Set';
+                                                @endphp
+                                                <span class="badge text-white" style="background-color: {{ $categoryColor }}">
+                                                    {{ $categoryName }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if($ticket->updated_at)
+                                                    {{ $ticket->updated_at->diffForHumans() }}
+                                                @else
+                                                    Never
                                                 @endif
                                             </td>
                                             <td>
-                                                @if($ticket->priority)
-                                                    <span class="badge text-white" style="background-color: {{ $ticket->priority->color }}">
-                                                        {{ $ticket->priority->name }}
-                                                    </span>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if($ticket->category)
-                                                    <span class="badge text-white" style="background-color: {{ $ticket->category->color }}">
-                                                        {{ $ticket->category->name }}
-                                                    </span>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                {{ $ticket->updated_at->diffForHumans() }}
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{{ route('customer.tickets.show', $ticket->id) }}" 
+                                                       class="btn btn-primary"
+                                                       title="View Ticket">
+                                                        <i class="fas fa-eye"></i> View
+                                                    </a>
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -83,11 +112,12 @@
                             </table>
                         </div>
 
-                        <div class="d-flex justify-content-center mt-4">
-                            {{ $tickets->links() }}
-                        </div>
-
+                        {{-- Pagination --}}
                         @if($tickets->hasPages())
+                            <div class="d-flex justify-content-center mt-4">
+                                {{ $tickets->links() }}
+                            </div>
+
                             <div class="text-muted text-center mt-2">
                                 {{ trans('ticketit::lang.table-info', [
                                     'start' => $tickets->firstItem(),
@@ -106,9 +136,28 @@
 
 @push('scripts')
 <script>
-    $(document).ready(function() {
-        // Auto-hide alerts after 5 seconds
-        $('.alert-dismissible').delay(5000).fadeOut(500);
+$(document).ready(function() {
+    
+    $('.alert-dismissible').delay(5000).fadeOut(500);
+    $('[data-toggle="tooltip"]').tooltip();
+    $('a').click(function() {
+        $(this).addClass('disabled').attr('disabled', true);
     });
+});
 </script>
+@endpush
+
+@push('styles')
+<style>
+    .badge {
+        font-size: 0.9em;
+        padding: 0.35em 0.65em;
+    }
+    .table th {
+        background-color: #f8f9fa;
+    }
+    .table td {
+        vertical-align: middle;
+    }
+</style>
 @endpush
