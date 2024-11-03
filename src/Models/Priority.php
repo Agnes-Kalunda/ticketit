@@ -7,23 +7,20 @@ use Illuminate\Database\Eloquent\Model;
 class Priority extends Model
 {
     protected $table = 'ticketit_priorities';
-
+    
     protected $fillable = ['name', 'color'];
-
-    /**
-     * Indicates that this model should not be timestamped.
-     *
-     * @var bool
-     */
+    
     public $timestamps = false;
 
-    /**
-     * Get related tickets.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
+    protected $guarded = ['id'];
+
     public function tickets()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'priority_id');
+        return $this->hasMany(Ticket::class, 'priority_id');
+    }
+
+    public function getColorAttribute($value)
+    {
+        return $value ?: '#666666';
     }
 }

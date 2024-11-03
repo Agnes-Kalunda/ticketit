@@ -7,33 +7,30 @@ use Illuminate\Database\Eloquent\Model;
 class Category extends Model
 {
     protected $table = 'ticketit_categories';
-
+    
     protected $fillable = ['name', 'color'];
-
-    /**
-     * Indicates that this model should not be timestamped.
-     *
-     * @var bool
-     */
+    
     public $timestamps = false;
 
-    /**
-     * Get related tickets.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
+    protected $guarded = ['id'];
+
     public function tickets()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'category_id');
+        return $this->hasMany(Ticket::class, 'category_id');
     }
 
-    /**
-     * Get related agents.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
     public function agents()
     {
-        return $this->belongsToMany('\Ticket\Ticketit\Models\Agent', 'ticketit_categories_users', 'category_id', 'user_id');
+        return $this->belongsToMany(
+            Agent::class, 
+            'ticketit_categories_users', 
+            'category_id', 
+            'user_id'
+        );
+    }
+
+    public function getColorAttribute($value)
+    {
+        return $value ?: '#666666';
     }
 }

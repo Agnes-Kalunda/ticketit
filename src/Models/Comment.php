@@ -13,23 +13,15 @@ class Comment extends Model
 
     protected $table = 'ticketit_comments';
 
-    /**
-     * Get related ticket.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
-     */
+    protected $fillable = ['content', 'user_id', 'ticket_id'];
+
     public function ticket()
     {
-        return $this->belongsTo('Ticket\Ticketit\Models\Ticket', 'ticket_id');
+        return $this->belongsTo(Ticket::class, 'ticket_id');
     }
 
-    /**
-     * Get comment owner.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
-     */
     public function user()
     {
-        return $this->belongsTo('App\User', 'user_id');
+        return $this->belongsTo(config('ticketit.models.user', 'App\User'), 'user_id');
     }
 }

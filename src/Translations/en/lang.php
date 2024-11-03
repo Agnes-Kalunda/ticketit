@@ -95,6 +95,13 @@ return [
     'create-ticket-describe-issue' => 'Describe your issue here in details',
     'create-new-ticket' => 'Create New Ticket',
 
+
+    'index-empty-records' => 'No tickets found.',
+    'index-my-tickets' => 'My Tickets',
+    'btn-create-new-ticket' => 'Create New Ticket',
+
+    
+
     // Show Ticket
     'show-ticket-title' => 'Ticket',
     'show-ticket-js-delete' => 'Are you sure you want to delete: ',
