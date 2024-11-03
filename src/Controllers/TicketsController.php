@@ -102,7 +102,7 @@ class TicketsController extends Controller
         ]);
 
         return view('ticketit::tickets.index_customer', compact('tickets'));
-
+    
     } catch (\Exception $e) {
         Log::error('Error fetching customer tickets: ' . $e->getMessage(), [
             'customer_id' => $this->getAuthUser()->id,
