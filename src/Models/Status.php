@@ -7,23 +7,22 @@ use Illuminate\Database\Eloquent\Model;
 class Status extends Model
 {
     protected $table = 'ticketit_statuses';
-
+    
     protected $fillable = ['name', 'color'];
-
-    /**
-     * Indicates that this model should not be timestamped.
-     *
-     * @var bool
-     */
+    
     public $timestamps = false;
 
-    /**
-     * Get related tickets.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
+    // Add guarded property 
+    protected $guarded = ['id'];
+
     public function tickets()
     {
-        return $this->hasMany('Ticket\Ticketit\Models\Ticket', 'status_id');
+        return $this->hasMany(Ticket::class, 'status_id');
+    }
+
+    // Add helper method to get color with fallback
+    public function getColorAttribute($value)
+    {
+        return $value ?: '#666666';
     }
 }

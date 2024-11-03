@@ -251,25 +251,76 @@ class TicketsController extends Controller
      */
     public function index()
     {
+        if ($this->isCustomer()) {
+            return redirect()->route('customer.tickets.index');
+        }
+
+        $user = $this->getAuthUser();
+        
+        // Get all tickets if admin, only assigned tickets if agent
+        $tickets = $this->tickets
+            ->when(!$user->ticketit_admin, function($query) use ($user) {
+                return $query->where('agent_id', $user->id);
+            })
+            ->with(['status', 'priority', 'category', 'customer'])
+            ->latest()
+            ->paginate(10);
+
+        // For displaying customer details
+        $tickets->getCollection()->transform(function ($ticket) {
+            if ($ticket->customer) {
+                $ticket->customer_name = $ticket->customer->name ?? 'Unknown';
+                $ticket->customer_email = $ticket->customer->email ?? 'No email';
+            } else {
+                $ticket->customer_name = 'N/A';
+                $ticket->customer_email = 'N/A';
+            }
+            return $ticket;
+        });
+
         $complete = false;
-        return view($this->isCustomer() ? 'ticketit::tickets.index_customer' : 'ticketit::index', 
-            compact('complete'));
+        return view('ticketit::index', compact('tickets', 'complete'));
     }
+
 
     /**
      * Display completed tickets
      *
      * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
+    
     public function indexComplete()
     {
         if ($this->isCustomer()) {
             return redirect()->route('customer.tickets.index');
         }
+
+        $user = $this->getAuthUser();
         
+        $tickets = $this->tickets
+            ->whereNotNull('completed_at')
+            ->when(!$user->ticketit_admin, function($query) use ($user) {
+                return $query->where('agent_id', $user->id);
+            })
+            ->with(['status', 'priority', 'category', 'customer'])
+            ->latest()
+            ->paginate(10);
+
+        $tickets->getCollection()->transform(function ($ticket) {
+            if ($ticket->customer) {
+                $ticket->customer_name = $ticket->customer->name ?? 'Unknown';
+                $ticket->customer_email = $ticket->customer->email ?? 'No email';
+            } else {
+                $ticket->customer_name = 'N/A';
+                $ticket->customer_email = 'N/A';
+            }
+            return $ticket;
+        });
+
         $complete = true;
-        return view('ticketit::index', compact('complete'));
+        return view('ticketit::index', compact('tickets', 'complete'));
     }
+
 
     /**
      * Returns priorities, categories and statuses lists
