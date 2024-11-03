@@ -54,18 +54,25 @@
                                                 </a>
                                             </td>
                                             <td>
-                                            @if($ticket->priority)
-    <span class="badge text-white" style="background-color: {{ $ticket->priority->color }}">
-        {{ $ticket->priority->name }}
-    </span>
-@endif
-
-@if($ticket->category)
-    <span class="badge text-white" style="background-color: {{ $ticket->category->color }}">
-        {{ $ticket->category->name }}
-    </span>
-@endif
-
+                                                @if($ticket->status)
+                                                    <span class="badge text-white" style="background-color: {{ $ticket->status->color }}">
+                                                        {{ $ticket->status->name }}
+                                                    </span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($ticket->priority)
+                                                    <span class="badge text-white" style="background-color: {{ $ticket->priority->color }}">
+                                                        {{ $ticket->priority->name }}
+                                                    </span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($ticket->category)
+                                                    <span class="badge text-white" style="background-color: {{ $ticket->category->color }}">
+                                                        {{ $ticket->category->name }}
+                                                    </span>
+                                                @endif
                                             </td>
                                             <td>
                                                 {{ $ticket->updated_at->diffForHumans() }}
