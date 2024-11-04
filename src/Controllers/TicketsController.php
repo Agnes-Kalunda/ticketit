@@ -37,18 +37,17 @@ class TicketsController extends Controller
     }
 
     protected function ensureDefaultDataExists()
-    {
-        try {
-            if (Category::count() === 0 || Priority::count() === 0 || Status::count() === 0) {
-                Log::info('Seeding default ticketit data...');
-                $seeder = new TicketitTableSeeder();
-                $seeder->run();
-                Log::info('Default ticketit data seeded successfully');
-            }
-        } catch (\Exception $e) {
-            Log::error('Error ensuring default data exists: ' . $e->getMessage());
+{
+    try {
+        if (Category::count() === 0 || Priority::count() === 0 || Status::count() === 0) {
+            $seeder = new TicketitTableSeeder();
+            $seeder->run();
         }
+    } catch (\Exception $e) {
+        
+        Log::error('Error ensuring default data exists: ' . $e->getMessage());
     }
+}
 
     public function isCustomer()
     {

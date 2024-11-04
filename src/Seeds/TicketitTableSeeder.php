@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Log;
+use Ticket\Ticketit\Models\Status;
+use Ticket\Ticketit\Models\Priority;
+use Ticket\Ticketit\Models\Category;
 
 class TicketitTableSeeder extends Seeder
 {
-    // Original demo settings
     public $email_domain = '@example.com';
     public $agents_qty = 5;
     public $agents_per_category = 2;
@@ -28,21 +29,21 @@ class TicketitTableSeeder extends Seeder
     public $tickets_max_close_period = 5;
     public $default_closed_status_id = 2;
 
-    // Original category settings
+    // Category settings
     protected $categories = [
         'Technical'         => '#0014f4',
         'Billing'          => '#2b9900',
         'Customer Services' => '#7e0099',
     ];
 
-    // Original status settings
+    // Status settings
     protected $statuses = [
         'Open'        => '#f39c12',
         'In Progress' => '#3498db',
         'Closed'      => '#2ecc71',
     ];
 
-    // Original priority settings
+    // Priority settings
     protected $priorities = [
         'Low'      => '#069900',
         'Medium'   => '#e1d200',
@@ -57,37 +58,9 @@ class TicketitTableSeeder extends Seeder
         Model::unguard();
 
         try {
-            $faker = \Faker\Factory::create();
-            
-            Log::info('Starting Ticketit seeder...');
-
-            // Get model classes from config
-            $userModel = Config::get('ticketit.models.user');
-            $customerModel = Config::get('ticketit.models.customer');
-
-            // Create agents (staff users)
-            $agents = [];
-            $agents_counter = 1;
-
-            $this->command->info('Creating demo agents...');
-            
-            // Create demo agents (Staff Users)
-            for ($a = 1; $a <= $this->agents_qty; $a++) {
-                $agent = new $userModel();
-                $agent->name = $faker->name;
-                $agent->email = 'agent'.$agents_counter.$this->email_domain;
-                $agent->ticketit_agent = 1;
-                $agent->password = Hash::make($this->default_agent_password);
-                $agent->save();
-                
-                $agents[$agent->id] = $agent;
-                $agents_counter++;
-            }
-
             // Create statuses
-            $this->command->info('Creating statuses...');
             foreach ($this->statuses as $name => $color) {
-                \Ticket\Ticketit\Models\Status::firstOrCreate(
+                Status::updateOrCreate(
                     ['name' => $name],
                     [
                         'color' => $color,
@@ -95,29 +68,11 @@ class TicketitTableSeeder extends Seeder
                         'updated_at' => now()
                     ]
                 );
-            }
-
-            // Create categories 
-            $this->command->info('Creating categories...');
-            foreach ($this->categories as $name => $color) {
-                $category = \Ticket\Ticketit\Models\Category::firstOrCreate(
-                    ['name' => $name],
-                    [
-                        'color' => $color,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ]
-                );
-                
-                // Assign agents to category 
-                $agent = array_rand($agents, $this->agents_per_category);
-                $category->agents()->attach($agent);
             }
 
             // Create priorities
-            $this->command->info('Creating priorities...');
             foreach ($this->priorities as $name => $color) {
-                \Ticket\Ticketit\Models\Priority::firstOrCreate(
+                Priority::updateOrCreate(
                     ['name' => $name],
                     [
                         'color' => $color,
@@ -127,114 +82,136 @@ class TicketitTableSeeder extends Seeder
                 );
             }
 
-            // Get counts for relationships
-            $categories_qty = \Ticket\Ticketit\Models\Category::count();
-            $priorities_qty = \Ticket\Ticketit\Models\Priority::count();
-            $statuses_qty = \Ticket\Ticketit\Models\Status::count();
-
-            // Create customers and their tickets
-            $this->command->info('Creating demo customers and tickets...');
-            $customers_counter = 1;
-
-            for ($u = 1; $u <= $this->users_qty; $u++) {
-                // Create customer
-                $customer = new $customerModel();
-                $customer->name = $faker->name;
-                $customer->email = 'customer'.$customers_counter.$this->email_domain;
-                $customer->username = 'customer'.$customers_counter;
-                $customer->password = Hash::make($this->default_user_password);
-                $customer->save();
-                $customers_counter++;
-
-                // Create tickets for customer (maintaining original ticket creation logic)
-                $tickets_qty = rand($this->tickets_per_user_min, $this->tickets_per_user_max);
-                
-                for ($t = 1; $t <= $tickets_qty; $t++) {
-                    $rand_category = rand(1, $categories_qty);
-                    $priority_id = rand(1, $priorities_qty);
-                    
-                    do {
-                        $rand_status = rand(1, $statuses_qty);
-                    } while ($rand_status == $this->default_closed_status_id);
-
-                    $category = \Ticket\Ticketit\Models\Category::find($rand_category);
-                    if ($category) {
-                        $agents = $category->agents()->pluck('name', 'id')->toArray();
-                        $agent_id = array_rand($agents);
-
-                        $random_create = rand(1, $this->tickets_date_period);
-                        $random_complete = rand($this->tickets_min_close_period, 
-                                            $this->tickets_max_close_period);
-
-                        $ticket = new \Ticket\Ticketit\Models\Ticket();
-                        $ticket->subject = $faker->text(50);
-                        $ticket->content = $faker->paragraphs(3, true);
-                        $ticket->html = nl2br($ticket->content);
-                        $ticket->status_id = $rand_status;
-                        $ticket->priority_id = $priority_id;
-                        $ticket->customer_id = $customer->id;
-                        $ticket->agent_id = $agent_id;
-                        $ticket->category_id = $rand_category;
-                        $ticket->created_at = Carbon::now()->subDays($random_create);
-                        $ticket->updated_at = Carbon::now()->subDays($random_create);
-
-                        $completed_at = new Carbon($ticket->created_at);
-                        if (!$completed_at->addDays($random_complete)->gt(Carbon::now())) {
-                            $ticket->completed_at = $completed_at;
-                            $ticket->updated_at = $completed_at;
-                            $ticket->status_id = $this->default_closed_status_id;
-                        }
-                        
-                        $ticket->save();
-
-                        // Create comments (maintaining original comment creation)
-                        $comments_qty = rand($this->comments_per_ticket_min, 
-                                        $this->comments_per_ticket_max);
-
-                        for ($c = 1; $c <= $comments_qty; $c++) {
-                            $comment = new \Ticket\Ticketit\Models\Comment();
-                            $comment->ticket_id = $ticket->id;
-                            $comment->content = $faker->paragraphs(3, true);
-                            $comment->html = nl2br($comment->content);
-                            
-                            // Alternate between customer and agent comments
-                            if ($c % 2 == 0) {
-                                $comment->customer_id = $customer->id;
-                            } else {
-                                $comment->user_id = $agent_id;
-                            }
-
-                            if (is_null($ticket->completed_at)) {
-                                $random_comment_date = $faker->dateTimeBetween(
-                                    '-'.$random_create.' days', 'now');
-                            } else {
-                                $random_comment_date = $faker->dateTimeBetween(
-                                    '-'.$random_create.' days', 
-                                    '-'.($random_create - $random_complete).' days');
-                            }
-
-                            $comment->created_at = $random_comment_date;
-                            $comment->updated_at = $random_comment_date;
-                            $comment->save();
-                        }
-
-                        // Update ticket's last update based on latest comment
-                        $last_comment = $ticket->comments->sortByDesc('created_at')->first();
-                        if ($last_comment) {
-                            $ticket->updated_at = $last_comment->created_at;
-                            $ticket->save();
-                        }
-                    }
-                }
+            // Create categories
+            foreach ($this->categories as $name => $color) {
+                Category::updateOrCreate(
+                    ['name' => $name],
+                    [
+                        'color' => $color,
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]
+                );
             }
 
-            $this->command->info('Seeding completed successfully!');
+            // Optional: Create demo data only if specifically requested
+            if (config('ticketit.seed_demo_data', false)) {
+                $this->createDemoData();
+            }
 
         } catch (\Exception $e) {
-            Log::error('Error in Ticketit seeder: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
+            if (isset($this->command)) {
+                $this->command->error('Error seeding data: ' . $e->getMessage());
+            }
             throw $e;
+        }
+    }
+
+    /**
+     * Create demo data for testing
+     */
+    protected function createDemoData()
+    {
+        $faker = \Faker\Factory::create();
+        
+        // Get model classes from config
+        $userModel = Config::get('ticketit.models.user');
+        $customerModel = Config::get('ticketit.models.customer');
+
+        // Create agents
+        $agents = [];
+        $agents_counter = 1;
+
+        for ($a = 1; $a <= $this->agents_qty; $a++) {
+            $agent = new $userModel();
+            $agent->name = $faker->name;
+            $agent->email = 'agent'.$agents_counter.$this->email_domain;
+            $agent->ticketit_agent = 1;
+            $agent->password = Hash::make($this->default_agent_password);
+            $agent->save();
+            
+            $agents[$agent->id] = $agent;
+            $agents_counter++;
+        }
+
+        // Get counts for relationships
+        $categories = Category::all();
+        $priorities = Priority::all();
+        $statuses = Status::all();
+
+        // Create customers and their tickets
+        $customers_counter = 1;
+
+        for ($u = 1; $u <= $this->users_qty; $u++) {
+            // Create customer
+            $customer = new $customerModel();
+            $customer->name = $faker->name;
+            $customer->email = 'customer'.$customers_counter.$this->email_domain;
+            $customer->username = 'customer'.$customers_counter;
+            $customer->password = Hash::make($this->default_user_password);
+            $customer->save();
+            $customers_counter++;
+
+            // Create tickets for customer
+            $tickets_qty = rand($this->tickets_per_user_min, $this->tickets_per_user_max);
+            
+            for ($t = 1; $t <= $tickets_qty; $t++) {
+                $category = $categories->random();
+                $priority = $priorities->random();
+                $status = $statuses->random();
+
+                // Get random agent from category
+                $agent = $agents[array_rand($agents)];
+
+                $created_date = Carbon::now()->subDays(rand(1, $this->tickets_date_period));
+                $ticket = new \Ticket\Ticketit\Models\Ticket();
+                $ticket->subject = $faker->sentence;
+                $ticket->content = $faker->paragraphs(3, true);
+                $ticket->status_id = $status->id;
+                $ticket->priority_id = $priority->id;
+                $ticket->customer_id = $customer->id;
+                $ticket->agent_id = $agent->id;
+                $ticket->category_id = $category->id;
+                $ticket->created_at = $created_date;
+                $ticket->updated_at = $created_date;
+
+                // Randomly complete some tickets
+                if (rand(0, 1)) {
+                    $completed_date = (clone $created_date)->addDays(rand($this->tickets_min_close_period, $this->tickets_max_close_period));
+                    if ($completed_date->lte(Carbon::now())) {
+                        $ticket->completed_at = $completed_date;
+                        $ticket->status_id = Status::where('name', 'Closed')->first()->id;
+                    }
+                }
+
+                $ticket->save();
+
+                // Create comments
+                $comments_qty = rand($this->comments_per_ticket_min, $this->comments_per_ticket_max);
+                $comment_date = clone $created_date;
+
+                for ($c = 1; $c <= $comments_qty; $c++) {
+                    $comment = new \Ticket\Ticketit\Models\Comment();
+                    $comment->ticket_id = $ticket->id;
+                    $comment->content = $faker->paragraph;
+                    
+                    // Alternate between customer and agent comments
+                    if ($c % 2 == 0) {
+                        $comment->customer_id = $customer->id;
+                    } else {
+                        $comment->user_id = $agent->id;
+                    }
+
+                    $comment_date = $comment_date->addHours(rand(1, 24));
+                    if ($ticket->completed_at && $comment_date->gt($ticket->completed_at)) {
+                        break;
+                    }
+
+                    $comment->created_at = $comment_date;
+                    $comment->updated_at = $comment_date;
+                    $comment->save();
+                }
+            }
         }
     }
 }
