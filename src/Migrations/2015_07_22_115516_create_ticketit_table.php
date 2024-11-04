@@ -46,6 +46,10 @@ class CreateTicketitTable extends Migration
             $table->unsignedBigInteger('agent_id')->nullable();
             $table->unsignedBigInteger('category_id');
             $table->timestamps();
+
+            $table->foreign('status_id')->references('id')->on('ticketit_statuses');
+            $table->foreign('priority_id')->references('id')->on('ticketit_priorities');
+            $table->foreign('category_id')->references('id')->on('ticketit_categories');
         });
 
         Schema::create('ticketit_comments', function (Blueprint $table) {

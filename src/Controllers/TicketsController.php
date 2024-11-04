@@ -30,25 +30,21 @@ class TicketsController extends Controller
      * @param Agent $agent
      */
     public function __construct(Ticket $tickets, Agent $agent)
-    {
-        $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
-        $this->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware', ['only' => ['edit', 'update']]);
-        $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['destroy']]);
+{
+    $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
+    $this->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware', ['only' => ['edit', 'update']]);
+    $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['destroy']]);
 
-        $this->tickets = $tickets;
-        $this->agent = $agent;
+    $this->tickets = $tickets;
+    $this->agent = $agent;
+
+    // Force seed default data
+    try {
+        $this->seedDefaultData();
+    } catch (\Exception $e) {
+        Log::error('Error seeding default data: ' . $e->getMessage());
     }
-
-    /**
-     * Determine if the current user is a customer
-     *
-     * @return bool
-     */
-    protected function isCustomer()
-    {
-        return Auth::guard('customer')->check();
-    }
-
+}
     /**
      * Get authenticated user (either customer or user)
      *
@@ -502,46 +498,34 @@ class TicketsController extends Controller
     try {
         Log::info('Starting ticket creation form...');
 
-        // Force seed if tables are empty
-        if (Models\Category::count() === 0 || Models\Priority::count() === 0) {
-            Log::info('Tables empty, seeding data...');
-            $this->seedDefaultData();
-        }
+        // Force seed data - remove the if condition
+        Log::info('Seeding default data...');
+        $this->seedDefaultData();
 
-        // Get fresh data and log counts
+        // Get fresh data
         $categories = Models\Category::orderBy('name')->get();
         $priorities = Models\Priority::orderBy('name')->get();
 
-        Log::info('Retrieved form data:', [
-            'categories_count' => $categories->count(),
-            'priorities_count' => $priorities->count(),
-            'categories' => $categories->pluck('name')->toArray(),
-            'priorities' => $priorities->pluck('name')->toArray()
-        ]);
-
-        // Transform for view
-        $categoriesForView = $categories->pluck('name', 'id');
-        $prioritiesForView = $priorities->pluck('name', 'id');
-
-        Log::info('Form data ready for view:', [
-            'categories_for_view' => $categoriesForView->toArray(),
-            'priorities_for_view' => $prioritiesForView->toArray()
+        // Debug log counts
+        Log::info('Current data counts:', [
+            'categories' => $categories->count(),
+            'priorities' => $priorities->count()
         ]);
 
         return view('ticketit::tickets.create_customer', [
-            'categories' => $categoriesForView,
-            'priorities' => $prioritiesForView,
+            'categories' => $categories->pluck('name', 'id'),
+            'priorities' => $priorities->pluck('name', 'id'),
             'master' => 'layouts.app'
         ]);
 
     } catch (\Exception $e) {
-        Log::error('Error in ticket creation form:', [
+        Log::error('Error in create:', [
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString()
         ]);
 
         return redirect()->back()
-            ->with('error', 'Error loading form data: ' . $e->getMessage());
+            ->with('error', 'Error loading form: ' . $e->getMessage());
     }
 }
     /**
