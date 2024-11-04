@@ -101,8 +101,9 @@ class TicketsController extends Controller
             'total' => $tickets->total()
         ]);
 
-        return view('ticketit::tickets.index_customer', compact('tickets'));
     
+        return view('ticketit::tickets.customer.index', compact('tickets'));
+
     } catch (\Exception $e) {
         Log::error('Error fetching customer tickets: ' . $e->getMessage(), [
             'customer_id' => $this->getAuthUser()->id,
@@ -619,7 +620,6 @@ class TicketsController extends Controller
             ->withInput();
     }
 }
-
     /**
      * Display ticket
      *

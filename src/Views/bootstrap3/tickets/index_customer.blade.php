@@ -137,9 +137,13 @@
 @push('scripts')
 <script>
 $(document).ready(function() {
-    
+    // Auto-hide alerts after 5 seconds
     $('.alert-dismissible').delay(5000).fadeOut(500);
+
+    // Initialize tooltips if using Bootstrap
     $('[data-toggle="tooltip"]').tooltip();
+
+    // Add loading state to links
     $('a').click(function() {
         $(this).addClass('disabled').attr('disabled', true);
     });
