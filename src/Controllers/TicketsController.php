@@ -17,9 +17,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Routing\Controller;
+use Ticket\Ticketit\Traits\AuthChecks;
 
 class TicketsController extends Controller
 {
+
+    
     protected $tickets;
     protected $agent;
 
@@ -29,6 +32,21 @@ class TicketsController extends Controller
      * @param Ticket $tickets
      * @param Agent $agent
      */
+
+    public function isCustomer()
+     {
+         return Auth::guard('customer')->check();
+     }
+
+    public function isAdmin()
+    {
+        return Auth::guard('web')->check() && Auth::user()->ticketit_admin;
+    }
+
+    public function isAgent()
+    {
+        return Auth::guard('web')->check() && Auth::user()->ticketit_agent;
+    }
     public function __construct(Ticket $tickets, Agent $agent)
 {
     $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
