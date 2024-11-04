@@ -23,9 +23,6 @@
                                        name="subject" 
                                        value="{{ old('subject') }}" 
                                        required>
-                                <small class="form-text text-muted">
-                                    {{ trans('ticketit::lang.create-ticket-brief-issue') }}
-                                </small>
                                 @error('subject')
                                     <span class="invalid-feedback" role="alert">
                                         <strong>{{ $message }}</strong>
@@ -35,22 +32,19 @@
                         </div>
 
                         <div class="form-group row">
-                            <label for="category_id" class="col-md-3 col-form-label text-md-right">
+                            <label for="category_name" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.category') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
-                                <select name="category_id" 
-                                        class="form-control @error('category_id') is-invalid @enderror" 
+                                <select name="category_name" 
+                                        class="form-control @error('category_name') is-invalid @enderror" 
                                         required>
-                                    <option value="">{{ trans('ticketit::lang.select-category') }}</option>
-                                    @foreach($categories as $id => $name)
-                                        <option value="{{ $id }}" 
-                                                {{ old('category_id') == $id ? 'selected' : '' }}>
-                                            {{ $name }}
-                                        </option>
-                                    @endforeach
+                                    <option value="">Select Category</option>
+                                    <option value="Technical" style="color: #0014f4" {{ old('category_name') == 'Technical' ? 'selected' : '' }}>Technical</option>
+                                    <option value="Billing" style="color: #2b9900" {{ old('category_name') == 'Billing' ? 'selected' : '' }}>Billing</option>
+                                    <option value="Customer Service" style="color: #7e0099" {{ old('category_name') == 'Customer Service' ? 'selected' : '' }}>Customer Service</option>
                                 </select>
-                                @error('category_id')
+                                @error('category_name')
                                     <span class="invalid-feedback" role="alert">
                                         <strong>{{ $message }}</strong>
                                     </span>
@@ -59,22 +53,19 @@
                         </div>
 
                         <div class="form-group row">
-                            <label for="priority_id" class="col-md-3 col-form-label text-md-right">
+                            <label for="priority_name" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.priority') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
-                                <select name="priority_id" 
-                                        class="form-control @error('priority_id') is-invalid @enderror" 
+                                <select name="priority_name" 
+                                        class="form-control @error('priority_name') is-invalid @enderror" 
                                         required>
-                                    <option value="">{{ trans('ticketit::lang.select-priority') }}</option>
-                                    @foreach($priorities as $id => $name)
-                                        <option value="{{ $id }}" 
-                                                {{ old('priority_id') == $id ? 'selected' : '' }}>
-                                            {{ $name }}
-                                        </option>
-                                    @endforeach
+                                    <option value="">Select Priority</option>
+                                    <option value="Low" style="color: #069900" {{ old('priority_name') == 'Low' ? 'selected' : '' }}>Low</option>
+                                    <option value="Medium" style="color: #e1d200" {{ old('priority_name') == 'Medium' ? 'selected' : '' }}>Medium</option>
+                                    <option value="High" style="color: #e10000" {{ old('priority_name') == 'High' ? 'selected' : '' }}>High</option>
                                 </select>
-                                @error('priority_id')
+                                @error('priority_name')
                                     <span class="invalid-feedback" role="alert">
                                         <strong>{{ $message }}</strong>
                                     </span>
@@ -91,9 +82,6 @@
                                           name="content" 
                                           rows="5" 
                                           required>{{ old('content') }}</textarea>
-                                <small class="form-text text-muted">
-                                    {{ trans('ticketit::lang.create-ticket-describe-issue') }}
-                                </small>
                                 @error('content')
                                     <span class="invalid-feedback" role="alert">
                                         <strong>{{ $message }}</strong>

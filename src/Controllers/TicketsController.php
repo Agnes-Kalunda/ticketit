@@ -2,6 +2,7 @@
 
 namespace Ticket\Ticketit\Controllers;
 
+use Illuminate\Routing\Controller;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -16,27 +17,42 @@ use Ticket\Ticketit\Models\Priority;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Routing\Controller;
-use Ticket\Ticketit\Traits\AuthChecks;
+use Ticket\Ticketit\Seeds\TicketitTableSeeder;
 
 class TicketsController extends Controller
 {
-
-    
     protected $tickets;
     protected $agent;
 
-    /**
-     * TicketsController constructor.
-     *
-     * @param Ticket $tickets
-     * @param Agent $agent
-     */
+    public function __construct(Ticket $tickets, Agent $agent)
+    {
+        $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
+        $this->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware', ['only' => ['edit', 'update']]);
+        $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['destroy']]);
+
+        $this->tickets = $tickets;
+        $this->agent = $agent;
+
+        $this->ensureDefaultDataExists();
+    }
+
+    protected function ensureDefaultDataExists()
+{
+    try {
+        if (Category::count() === 0 || Priority::count() === 0 || Status::count() === 0) {
+            $seeder = new TicketitTableSeeder();
+            $seeder->run();
+        }
+    } catch (\Exception $e) {
+        
+        Log::error('Error ensuring default data exists: ' . $e->getMessage());
+    }
+}
 
     public function isCustomer()
-     {
-         return Auth::guard('customer')->check();
-     }
+    {
+        return Auth::guard('customer')->check();
+    }
 
     public function isAdmin()
     {
@@ -47,27 +63,7 @@ class TicketsController extends Controller
     {
         return Auth::guard('web')->check() && Auth::user()->ticketit_agent;
     }
-    public function __construct(Ticket $tickets, Agent $agent)
-{
-    $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
-    $this->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware', ['only' => ['edit', 'update']]);
-    $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['destroy']]);
 
-    $this->tickets = $tickets;
-    $this->agent = $agent;
-
-    // Force seed default data
-    try {
-        $this->seedDefaultData();
-    } catch (\Exception $e) {
-        Log::error('Error seeding default data: ' . $e->getMessage());
-    }
-}
-    /**
-     * Get authenticated user (either customer or user)
-     *
-     * @return \Illuminate\Contracts\Auth\Authenticatable|null
-     */
     protected function getAuthUser()
     {
         if ($this->isCustomer()) {
@@ -76,64 +72,6 @@ class TicketsController extends Controller
         return Auth::user();
     }
 
-    /**
-     * Display customer tickets index
-     *
-     * @return \Illuminate\View\View
-     */
-    public function customerIndex()
-{
-    try {
-        if (!$this->isCustomer()) {
-            Log::warning('Non-customer attempted to view tickets');
-            return redirect()->route('home')
-                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
-        }
-
-        $customerId = $this->getAuthUser()->id;
-        
-        Log::info('Fetching tickets for customer:', ['customer_id' => $customerId]);
-
-        // Get tickets query
-        $tickets = $this->tickets
-            ->where('customer_id', $customerId)
-            ->with(['status', 'priority', 'category'])
-            ->orderBy('created_at', 'desc');
-
-        // Log the raw SQL query
-        Log::info('Ticket query:', [
-            'sql' => $tickets->toSql(),
-            'bindings' => $tickets->getBindings()
-        ]);
-
-        // Execute query with pagination
-        $tickets = $tickets->paginate(10);
-
-        // Log results
-        Log::info('Tickets found:', [
-            'count' => $tickets->count(),
-            'total' => $tickets->total()
-        ]);
-
-    
-        return view('ticketit::tickets.customer.index', compact('tickets'));
-
-    } catch (\Exception $e) {
-        Log::error('Error fetching customer tickets: ' . $e->getMessage(), [
-            'customer_id' => $this->getAuthUser()->id,
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return redirect()->back()
-            ->with('error', 'Error loading tickets. Please try again.');
-    }
-}
-    /**
-     * Get table data for datatables
-     *
-     * @param bool $complete
-     * @return mixed
-     */
     public function data($complete = false)
     {
         if (LaravelVersion::min('5.4')) {
@@ -157,39 +95,20 @@ class TicketsController extends Controller
         return $collection->make(true);
     }
 
-    /**
-     * Get the base ticket collection based on user type
-     *
-     * @param bool $complete
-     * @return mixed
-     */
     protected function getTicketCollection($complete = false)
     {
         if ($this->isCustomer()) {
             return $this->getCustomerTickets($complete);
         }
-
         return $this->getStaffTickets($complete);
     }
 
-    /**
-     * Get customer specific tickets
-     *
-     * @param bool $complete
-     * @return mixed
-     */
     protected function getCustomerTickets($complete)
     {
         $tickets = $this->tickets->where('customer_id', $this->getAuthUser()->id);
         return $complete ? $tickets->complete() : $tickets->active();
     }
 
-    /**
-     * Get staff specific tickets
-     *
-     * @param bool $complete
-     * @return mixed
-     */
     protected function getStaffTickets($complete)
     {
         $user = $this->agent->find(auth()->user()->id);
@@ -209,12 +128,6 @@ class TicketsController extends Controller
             Ticket::userTickets($user->id)->active();
     }
 
-    /**
-     * Join ticket tables for datatables
-     *
-     * @param mixed $collection
-     * @return mixed
-     */
     protected function joinTicketTables($collection)
     {
         return $collection->join('ticketit_statuses', 'ticketit_statuses.id', '=', 'ticketit.status_id')
@@ -241,12 +154,6 @@ class TicketsController extends Controller
             ]);
     }
 
-    /**
-     * Render ticket table
-     *
-     * @param mixed $collection
-     * @return mixed
-     */
     public function renderTicketTable($collection)
     {
         $collection->editColumn('subject', function ($ticket) {
@@ -289,345 +196,135 @@ class TicketsController extends Controller
         return $collection;
     }
 
-    /**
-     * Display index page
-     *
-     * @return \Illuminate\View\View
-     */
-    public function index()
-    {
-        if ($this->isCustomer()) {
-            return redirect()->route('customer.tickets.index');
-        }
-
-        $user = $this->getAuthUser();
-        
-        // Get all tickets if admin, only assigned tickets if agent
-        $tickets = $this->tickets
-            ->when(!$user->ticketit_admin, function($query) use ($user) {
-                return $query->where('agent_id', $user->id);
-            })
-            ->with(['status', 'priority', 'category', 'customer'])
-            ->latest()
-            ->paginate(10);
-
-        // For displaying customer details
-        $tickets->getCollection()->transform(function ($ticket) {
-            if ($ticket->customer) {
-                $ticket->customer_name = $ticket->customer->name ?? 'Unknown';
-                $ticket->customer_email = $ticket->customer->email ?? 'No email';
-            } else {
-                $ticket->customer_name = 'N/A';
-                $ticket->customer_email = 'N/A';
-            }
-            return $ticket;
-        });
-
-        $complete = false;
-        return view('ticketit::index', compact('tickets', 'complete'));
-    }
-
-
-    /**
-     * Display completed tickets
-     *
-     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
-     */
-    
-    public function indexComplete()
-    {
-        if ($this->isCustomer()) {
-            return redirect()->route('customer.tickets.index');
-        }
-
-        $user = $this->getAuthUser();
-        
-        $tickets = $this->tickets
-            ->whereNotNull('completed_at')
-            ->when(!$user->ticketit_admin, function($query) use ($user) {
-                return $query->where('agent_id', $user->id);
-            })
-            ->with(['status', 'priority', 'category', 'customer'])
-            ->latest()
-            ->paginate(10);
-
-        $tickets->getCollection()->transform(function ($ticket) {
-            if ($ticket->customer) {
-                $ticket->customer_name = $ticket->customer->name ?? 'Unknown';
-                $ticket->customer_email = $ticket->customer->email ?? 'No email';
-            } else {
-                $ticket->customer_name = 'N/A';
-                $ticket->customer_email = 'N/A';
-            }
-            return $ticket;
-        });
-
-        $complete = true;
-        return view('ticketit::index', compact('tickets', 'complete'));
-    }
-
-
-    /**
-     * Returns priorities, categories and statuses lists
-     *
-     * @return array
-     */
     protected function PCS()
-{
-    $time = LaravelVersion::min('5.8') ? 60*60 : 60;
+    {
+        $time = LaravelVersion::min('5.8') ? 60*60 : 60;
 
-    try {
-        // Get priorities
-        $priorities = Cache::remember('ticketit::priorities', $time, function () {
-            return Models\Priority::orderBy('name')->get();
-        });
-
-        // Get categories
-        $categories = Cache::remember('ticketit::categories', $time, function () {
-            return Models\Category::orderBy('name')->get();
-        });
-
-        // Get statuses
-        $statuses = Cache::remember('ticketit::statuses', $time, function () {
-            return Models\Status::orderBy('name')->get();
-        });
-
-        // First check if there's data
-        if ($priorities->isEmpty() && $categories->isEmpty()) {
-            // Seed some default data
-            $this->seedDefaultData();
-            
-            // Fetch again
-            $priorities = Models\Priority::orderBy('name')->get();
-            $categories = Models\Category::orderBy('name')->get();
-            $statuses = Models\Status::orderBy('name')->get();
-        }
-
-        return [
-            $priorities->pluck('name', 'id'),
-            $categories->pluck('name', 'id'),
-            $statuses->pluck('name', 'id')
-        ];
-
-    } catch (\Exception $e) {
-        Log::error('Error in PCS method: ' . $e->getMessage());
-        return [collect([]), collect([]), collect([])];
-    }
-}
-
-
-    protected function seedDefaultData()
-{
         try {
-        // Seed default priorities if none exist
-            if (Models\Priority::count() === 0) {
-                Models\Priority::insert([
-                    [
-                        'name' => 'Low',
-                        'color' => '#069900',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ],
-                [
-                        'name' => 'Medium',
-                        'color' => '#e1d200',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ],
-                [
-                        'name' => 'High',
-                        'color' => '#e10000',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ]
-            ]);
+            $priorities = Cache::remember('ticketit::priorities', $time, function () {
+                return Models\Priority::orderBy('name')->get();
+            });
+
+            $categories = Cache::remember('ticketit::categories', $time, function () {
+                return Models\Category::orderBy('name')->get();
+            });
+
+            $statuses = Cache::remember('ticketit::statuses', $time, function () {
+                return Models\Status::orderBy('name')->get();
+            });
+
+            if ($priorities->isEmpty() && $categories->isEmpty()) {
+                $this->ensureDefaultDataExists();
+                
+                $priorities = Models\Priority::orderBy('name')->get();
+                $categories = Models\Category::orderBy('name')->get();
+                $statuses = Models\Status::orderBy('name')->get();
+            }
+
+            return [
+                $priorities->pluck('name', 'id'),
+                $categories->pluck('name', 'id'),
+                $statuses->pluck('name', 'id')
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error in PCS method: ' . $e->getMessage());
+            return [collect([]), collect([]), collect([])];
         }
-
-        // Seed default categories if none exist
-            if (Models\Category::count() === 0) {
-                Models\Category::insert([
-                 [
-                        'name' => 'Technical',
-                        'color' => '#0014f4',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ],
-                [
-                        'name' => 'Billing',
-                        'color' => '#2b9900',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ],
-                [
-                        'name' => 'Customer Service',
-                        'color' => '#7e0099',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ]
-            ]);
-        }
-
-        // Seed default statuses if none exist
-            if (Models\Status::count() === 0) {
-                Models\Status::insert([
-                [
-                        'name' => 'Open',
-                        'color' => '#f39c12',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ],
-                [
-                        'name' => 'In Progress',
-                        'color' => '#3498db',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ],
-                [
-                        'name' => 'Closed',
-                        'color' => '#2ecc71',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                ]
-            ]);
-        }
-
-        // Clear the cache after seeding
-            Cache::forget('ticketit::priorities');
-            Cache::forget('ticketit::categories');
-            Cache::forget('ticketit::statuses');
-
-     } catch (\Exception $e) {
-            Log::error('Error seeding default data: ' . $e->getMessage());
     }
-}
 
-    /**
-     * Show create ticket form
-     *
-     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
-     */
     public function create()
-{
-    if (!$this->isCustomer()) {
-        return redirect()->route(Setting::grab('main_route').'.index')
-            ->with('warning', 'Staff members cannot create tickets');
-    }
-
-    try {
-        Log::info('Starting ticket creation form...');
-
-        // Force seed data - remove the if condition
-        Log::info('Seeding default data...');
-        $this->seedDefaultData();
-
-        // Get fresh data
-        $categories = Models\Category::orderBy('name')->get();
-        $priorities = Models\Priority::orderBy('name')->get();
-
-        // Debug log counts
-        Log::info('Current data counts:', [
-            'categories' => $categories->count(),
-            'priorities' => $priorities->count()
-        ]);
-
-        return view('ticketit::tickets.create_customer', [
-            'categories' => $categories->pluck('name', 'id'),
-            'priorities' => $priorities->pluck('name', 'id'),
-            'master' => 'layouts.app'
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('Error in create:', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return redirect()->back()
-            ->with('error', 'Error loading form: ' . $e->getMessage());
-    }
-}
-    /**
-     * Store a new ticket
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function store(Request $request)
-{
-    try {
-        // Log incoming request
-        Log::info('Ticket submission attempt:', [
-            'customer_id' => $this->getAuthUser()->id,
-            'request_data' => $request->all()
-        ]);
-
+    {
         if (!$this->isCustomer()) {
-            Log::warning('Non-customer attempted to create ticket');
             return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+                ->with('warning', 'Staff members cannot create tickets');
         }
 
-        $validator = Validator::make($request->all(), [
-            'subject' => 'required|min:3',
-            'content' => 'required|min:6',
-            'priority_id' => 'required|exists:ticketit_priorities,id',
-            'category_id' => 'required|exists:ticketit_categories,id',
-        ]);
+        try {
+            $this->ensureDefaultDataExists();
 
-        if ($validator->fails()) {
-            Log::error('Validation failed:', ['errors' => $validator->errors()->toArray()]);
+            $categories = Category::orderBy('name')->pluck('name', 'id');
+            $priorities = Priority::orderBy('name')->pluck('name', 'id');
+
+            Log::info('Form data retrieved:', [
+                'categories_count' => count($categories),
+                'priorities_count' => count($priorities)
+            ]);
+
+            return view('ticketit::tickets.create_customer', [
+                'categories' => $categories,
+                'priorities' => $priorities,
+                'master' => 'layouts.app'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in create form: ' . $e->getMessage());
             return redirect()->back()
-                ->withErrors($validator)
+                ->with('error', 'Error loading form: ' . $e->getMessage());
+        }
+    }
+
+    public function store(Request $request)
+    {
+        try {
+            Log::info('Ticket submission attempt:', [
+                'customer_id' => $this->getAuthUser()->id,
+                'request_data' => $request->all()
+            ]);
+
+            if (!$this->isCustomer()) {
+                return redirect()->route(Setting::grab('main_route').'.index')
+                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+            }
+
+            $validator = Validator::make($request->all(), [
+                'subject' => 'required|min:3',
+                'content' => 'required|min:6',
+                'category_id' => 'required|exists:ticketit_categories,id',
+                'priority_id' => 'required|exists:ticketit_priorities,id',
+            ]);
+
+            if ($validator->fails()) {
+                return redirect()->back()
+                    ->withErrors($validator)
+                    ->withInput();
+            }
+
+            $connection = app('db')->connection();
+            $connection->beginTransaction();
+
+            try {
+                $status = Status::where('name', 'Open')->firstOrFail();
+
+                $ticket = new Ticket();
+                $ticket->subject = $request->subject;
+                $ticket->content = $request->content;
+                $ticket->priority_id = $request->priority_id;
+                $ticket->category_id = $request->category_id;
+                $ticket->status_id = $status->id;
+                $ticket->customer_id = $this->getAuthUser()->id;
+
+                if (!$ticket->save()) {
+                    throw new \Exception('Failed to save ticket');
+                }
+
+                $connection->commit();
+                return redirect()->route('customer.tickets.index')
+                    ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
+
+            } catch (\Exception $e) {
+                $connection->rollBack();
+                throw $e;
+            }
+                
+        } catch (\Exception $e) {
+            Log::error('Ticket creation failed: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Failed to create ticket: ' . $e->getMessage())
                 ->withInput();
         }
-
-        // Get default open status
-        $status = Status::where('name', 'Open')->first();
-        if (!$status) {
-            Log::error('Default status not found');
-            throw new \Exception('Default status not found');
-        }
-
-        $ticket = new Ticket();
-        $ticket->subject = $request->subject;
-        $ticket->content = $request->content;  // Changed from setPurifiedContent
-        $ticket->priority_id = $request->priority_id;
-        $ticket->category_id = $request->category_id;
-        $ticket->status_id = $status->id;
-        $ticket->customer_id = $this->getAuthUser()->id;
-
-        // Log ticket data before save
-        Log::info('Attempting to save ticket:', [
-            'ticket_data' => $ticket->toArray()
-        ]);
-
-        if (!$ticket->save()) {
-            Log::error('Failed to save ticket');
-            throw new \Exception('Failed to save ticket');
-        }
-
-        Log::info('Ticket created successfully', ['ticket_id' => $ticket->id]);
-
-        return redirect()->route('customer.tickets.index')
-            ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
-                
-    } catch (\Exception $e) {
-        Log::error('Ticket creation failed: ' . $e->getMessage(), [
-            'exception' => $e,
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return redirect()->back()
-            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
-            ->withInput();
     }
-}
-    /**
-     * Display ticket
-     *
-     * @param int $id
-     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
-     */
+
     public function show($id)
     {
         $ticket = $this->tickets->findOrFail($id);
@@ -646,13 +343,10 @@ class TicketsController extends Controller
         }
 
         list($priority_lists, $category_lists, $status_lists) = $this->PCS();
-
         $close_perm = $this->permToClose($id);
         $reopen_perm = $this->permToReopen($id);
-
-        $cat_agents = Models\Category::find($ticket->category_id)->agents()->agentsLists();
+        $cat_agents = Category::find($ticket->category_id)->agents()->agentsLists();
         $agent_lists = is_array($cat_agents) ? ['auto' => 'Auto Select'] + $cat_agents : ['auto' => 'Auto Select'];
-
         $comments = $ticket->comments()->paginate(Setting::grab('paginate_items'));
 
         return view('ticketit::tickets.show', compact(
@@ -661,13 +355,6 @@ class TicketsController extends Controller
         ));
     }
 
-    /**
-     * Update ticket
-     *
-     * @param Request $request
-     * @param int $id
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function update(Request $request, $id)
     {
         if ($this->isCustomer()) {
@@ -687,7 +374,7 @@ class TicketsController extends Controller
         $ticket = $this->tickets->findOrFail($id);
 
         $ticket->subject = $request->subject;
-        $ticket->setPurifiedContent($request->get('content'));
+        $ticket->content = $request->content;
         $ticket->status_id = $request->status_id;
         $ticket->category_id = $request->category_id;
         $ticket->priority_id = $request->priority_id;
@@ -704,28 +391,6 @@ class TicketsController extends Controller
             ->with('status', trans('ticketit::lang.the-ticket-has-been-modified'));
     }
 
-    /**
-     * Delete ticket
-     *
-     * @param int $id
-     * @return \Illuminate\Http\RedirectResponse
-     */
-    public function destroy($id)
-    {
-        $ticket = $this->tickets->findOrFail($id);
-        $subject = $ticket->subject;
-        $ticket->delete();
-
-        return redirect()->route(Setting::grab('main_route').'.index')
-            ->with('status', trans('ticketit::lang.the-ticket-has-been-deleted', ['name' => $subject]));
-    }
-
-    /**
-     * Complete ticket
-     *
-     * @param int $id
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function complete($id)
     {
         if ($this->permToClose($id) == 'yes') {
@@ -747,12 +412,6 @@ class TicketsController extends Controller
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
     }
 
-    /**
-     * Reopen ticket
-     *
-     * @param int $id
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function reopen($id)
     {
         if ($this->permToReopen($id) == 'yes') {
@@ -774,16 +433,9 @@ class TicketsController extends Controller
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
     }
 
-    /**
-     * Get agent select list HTML
-     *
-     * @param int $category_id
-     * @param int $ticket_id
-     * @return string
-     */
     public function agentSelectList($category_id, $ticket_id)
     {
-        $cat_agents = Models\Category::find($category_id)->agents()->agentsLists();
+        $cat_agents = Category::find($category_id)->agents()->agentsLists();
         $agents = is_array($cat_agents) ? ['auto' => 'Auto Select'] + $cat_agents : ['auto' => 'Auto Select'];
 
         $selected_Agent = $this->tickets->find($ticket_id)->agent->id;
@@ -797,12 +449,16 @@ class TicketsController extends Controller
         return $select;
     }
 
-    /**
-     * Check permission to close ticket
-     *
-     * @param int $id
-     * @return string
-     */
+    public function destroy($id)
+    {
+        $ticket = $this->tickets->findOrFail($id);
+        $subject = $ticket->subject;
+        $ticket->delete();
+
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('status', trans('ticketit::lang.the-ticket-has-been-deleted', ['name' => $subject]));
+    }
+
     public function permToClose($id)
     {
         $close_ticket_perm = Setting::grab('close_ticket_perm');
@@ -820,12 +476,6 @@ class TicketsController extends Controller
         return 'no';
     }
 
-    /**
-     * Check permission to reopen ticket
-     *
-     * @param int $id
-     * @return string
-     */
     public function permToReopen($id)
     {
         $reopen_ticket_perm = Setting::grab('reopen_ticket_perm');
@@ -843,12 +493,6 @@ class TicketsController extends Controller
         return 'no';
     }
 
-    /**
-     * Calculate monthly performance
-     *
-     * @param int $period
-     * @return array
-     */
     public function monthlyPerfomance($period = 2)
     {
         $categories = Category::all();
@@ -879,12 +523,6 @@ class TicketsController extends Controller
         return $records;
     }
 
-    /**
-     * Calculate ticket performance
-     *
-     * @param Ticket $ticket
-     * @return int|false
-     */
     public function ticketPerformance($ticket)
     {
         if ($ticket->completed_at == null) {
@@ -897,14 +535,6 @@ class TicketsController extends Controller
         return $created->diff($completed)->days;
     }
 
-    /**
-     * Calculate interval performance
-     *
-     * @param Carbon $from
-     * @param Carbon $to
-     * @param int|bool $cat_id
-     * @return float|false
-     */
     public function intervalPerformance($from, $to, $cat_id = false)
     {
         $query = Ticket::whereBetween('completed_at', [$from, $to]);
@@ -930,11 +560,6 @@ class TicketsController extends Controller
         return $performance_count / $counter;
     }
 
-    /**
-     * Get validation messages
-     *
-     * @return array
-     */
     protected function getValidationMessages()
     {
         return [
