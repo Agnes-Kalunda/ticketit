@@ -22,7 +22,7 @@ Route::group([
     'middleware' => ['web', 'auth:customer'],
     'prefix' => 'customer/tickets'
 ], function () use ($main_route) {
-    Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@customerIndex')
+    Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@Index')
         ->name('customer.tickets.index');
     Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
         ->name('customer.tickets.create');
