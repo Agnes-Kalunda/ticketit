@@ -268,92 +268,65 @@ class TicketsController extends Controller
     }
 
     public function store(Request $request)
-{
-    try {
-        if (!$this->isCustomer()) {
-            return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
-        }
-
-        $validator = Validator::make($request->all(), [
-            'subject' => 'required|min:3|max:255',
-            'content' => 'required|min:6',
-            'category_id' => 'required|exists:ticketit_categories,id',
-            'priority_id' => 'required|exists:ticketit_priorities,id',
-        ]);
-
-        if ($validator->fails()) {
-            return redirect()->back()
-                ->withErrors($validator)
-                ->withInput();
-        }
-
-        $connection = app('db')->connection();
-        $connection->beginTransaction();
-
-        try {
-            // Get default open status
-            $status = Status::where('name', 'Open')->firstOrFail();
-
-            // Create ticket
-            $ticket = new Ticket();
-            $ticket->subject = $request->subject;
-            $ticket->content = $request->content;
-            $ticket->priority_id = $request->priority_id;
-            $ticket->category_id = $request->category_id;
-            $ticket->status_id = $status->id;
-            $ticket->customer_id = $this->getAuthUser()->id;
-            $ticket->save();
-
-            $connection->commit();
-
-            return redirect()->route('customer.tickets.index')
-                ->with('status', 'Ticket created successfully!');
-
-        } catch (\Exception $e) {
-            $connection->rollBack();
-            throw $e;
-        }
-    } catch (\Exception $e) {
-        return redirect()->back()
-            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
-            ->withInput();
-    }
-}
-
-    public function customerIndex()
     {
         try {
+            Log::info('Ticket submission attempt:', [
+                'customer_id' => $this->getAuthUser()->id,
+                'request_data' => $request->all()
+            ]);
+
             if (!$this->isCustomer()) {
-                return redirect()->route('home')
-                    ->with('warning', 'You are not permitted to access this page.');
+                return redirect()->route(Setting::grab('main_route').'.index')
+                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
             }
 
-            $tickets = Ticket::where('customer_id', $this->getAuthUser()->id)
-                ->with(['status', 'priority', 'category'])
-                ->latest()
-                ->paginate(10);
+            $validator = Validator::make($request->all(), [
+                'subject' => 'required|min:3',
+                'content' => 'required|min:6',
+                'category_id' => 'required|exists:ticketit_categories,id',
+                'priority_id' => 'required|exists:ticketit_priorities,id',
+            ]);
 
-            return view('ticketit::tickets.customer.index', compact('tickets'));
+            if ($validator->fails()) {
+                return redirect()->back()
+                    ->withErrors($validator)
+                    ->withInput();
+            }
 
+            $connection = app('db')->connection();
+            $connection->beginTransaction();
+
+            try {
+                $status = Status::where('name', 'Open')->firstOrFail();
+
+                $ticket = new Ticket();
+                $ticket->subject = $request->subject;
+                $ticket->content = $request->content;
+                $ticket->priority_id = $request->priority_id;
+                $ticket->category_id = $request->category_id;
+                $ticket->status_id = $status->id;
+                $ticket->customer_id = $this->getAuthUser()->id;
+
+                if (!$ticket->save()) {
+                    throw new \Exception('Failed to save ticket');
+                }
+
+                $connection->commit();
+                return redirect()->route('customer.tickets.index')
+                    ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
+
+            } catch (\Exception $e) {
+                $connection->rollBack();
+                throw $e;
+            }
+                
         } catch (\Exception $e) {
+            Log::error('Ticket creation failed: ' . $e->getMessage());
             return redirect()->back()
-                ->with('error', 'Error loading tickets: ' . $e->getMessage());
+                ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+                ->withInput();
         }
-
-
-
     }
-
-
-    public function getRecentTickets($limit = 5)
-{
-    return Ticket::where('customer_id', $this->getAuthUser()->id)
-        ->with(['status'])
-        ->latest()
-        ->limit($limit)
-        ->get();
-}
 
     public function show($id)
     {
