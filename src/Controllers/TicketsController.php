@@ -417,162 +417,145 @@ class TicketsController extends Controller
 
 
     protected function seedDefaultData()
-{
+    {
         try {
-            Log::info('Starting seedDefaultData check...');
-        
-        // Get connection
-            $pdo = app('db')->connection()->getPdo();
-        
-        // Check current counts
-            $counts = [];
-            $tables = ['ticketit_priorities', 'ticketit_categories', 'ticketit_statuses'];
-        
-            foreach ($tables as $table) {
-                $stmt = $pdo->query("SELECT COUNT(*) FROM {$table}");
-                $counts[$table] = $stmt->fetchColumn();
-        }
-        
-            Log::info('Current counts:', $counts);
-
-        // Seed priorities if empty
-            if ($counts['ticketit_priorities'] == 0) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO ticketit_priorities 
-                    (name, color, created_at, updated_at) 
-                    VALUES 
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ");
+            Log::info('Starting targeted seeding for priorities and categories...');
             
-                $stmt->execute([
-                    'Low', '#069900',
-                    'Medium', '#e1d200',
-                    'High', '#e10000'
-            ]);
+            // Get connection
+            $connection = app('db')->connection();
             
-                Log::info('Priorities seeded');
-        }
+            // Only seed priorities if empty
+            $priorityCount = $connection->table('ticketit_priorities')->count();
+            if ($priorityCount == 0) {
+                Log::info('Seeding priorities...');
+                
+                $now = date('Y-m-d H:i:s');
+                $connection->table('ticketit_priorities')->insert([
+                    [
+                        'name' => 'Low',
+                        'color' => '#069900',
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ],
+                    [
+                        'name' => 'Medium',
+                        'color' => '#e1d200',
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ],
+                    [
+                        'name' => 'High',
+                        'color' => '#e10000',
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ]
+                ]);
+                
+                Log::info('Priorities seeded successfully');
+            }
 
-        // Seed categories if empty
-            if ($counts['ticketit_categories'] == 0) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO ticketit_categories 
-                    (name, color, created_at, updated_at) 
-                    VALUES 
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ");
+            // Only seed categories if empty
+            $categoryCount = $connection->table('ticketit_categories')->count();
+            if ($categoryCount == 0) {
+                Log::info('Seeding categories...');
+                
+                $now = date('Y-m-d H:i:s');
+                $connection->table('ticketit_categories')->insert([
+                    [
+                        'name' => 'Technical',
+                        'color' => '#0014f4',
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ],
+                    [
+                        'name' => 'Billing',
+                        'color' => '#2b9900',
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ],
+                    [
+                        'name' => 'Customer Service',
+                        'color' => '#7e0099',
+                        'created_at' => $now,
+                        'updated_at' => $now
+                    ]
+                ]);
+                
+                Log::info('Categories seeded successfully');
+            }
+
+            // Verify seeding
+            $finalCounts = [
+                'priorities' => $connection->table('ticketit_priorities')->count(),
+                'categories' => $connection->table('ticketit_categories')->count()
+            ];
             
-                $stmt->execute([
-                    'Technical', '#0014f4',
-                    'Billing', '#2b9900',
-                    'Customer Service', '#7e0099'
-            ]);
-            
-                Log::info('Categories seeded');
-        }
+            Log::info('Final counts:', $finalCounts);
 
-        // Seed statuses if empty
-            if ($counts['ticketit_statuses'] == 0) {
-                $stmt = $pdo->prepare("
-                    INSERT INTO ticketit_statuses 
-                    (name, color, created_at, updated_at) 
-                    VALUES 
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ");
-            
-                $stmt->execute([
-                    'Open', '#f39c12',
-                    'In Progress', '#3498db',
-                    'Closed', '#2ecc71'
-            ]);
-            
-                Log::info('Statuses seeded');
-        }
+            // Clear cache
+            Cache::forget('ticketit::priorities');
+            Cache::forget('ticketit::categories');
 
-        // Verify seeding
-            $newCounts = [];
-            foreach ($tables as $table) {
-            $stmt = $pdo->query("SELECT COUNT(*) FROM {$table}");
-            $newCounts[$table] = $stmt->fetchColumn();
-        }
-        
-            Log::info('New counts after seeding:', $newCounts);
+            return $finalCounts;
 
-        // Clear cache
-            if (Cache::has('ticketit::priorities')) Cache::forget('ticketit::priorities');
-            if (Cache::has('ticketit::categories')) Cache::forget('ticketit::categories');
-            if (Cache::has('ticketit::statuses')) Cache::forget('ticketit::statuses');
-
-    } catch (\Exception $e) {
-            Log::error('Error in seedDefaultData: ' . $e->getMessage(), [
+        } catch (\Exception $e) {
+            Log::error('Error seeding data: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
-        ]);
+            ]);
+            throw $e;
+        }
+
     }
-}
 
 /**
  * Modified create method using database connection
  */
-    public function create()
+public function create()
 {
-        if (!$this->isCustomer()) {
-            return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', 'Staff members cannot create tickets');
+    if (!$this->isCustomer()) {
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('warning', 'Staff members cannot create tickets');
     }
 
-        try {
-            Log::info('Starting ticket creation form...');
-
-        // Force seed data
-            $this->seedDefaultData();
-
-        // Get connection
-            $pdo = app('db')->connection()->getPdo();
-
-        // Get categories
-            $categories = [];
-            $stmt = $pdo->query("SELECT id, name FROM ticketit_categories ORDER BY name");
-            while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
-                $categories[$row['id']] = $row['name'];
+    try {
+        // Force seed data and get counts
+        $counts = $this->seedDefaultData();
+        
+        if ($counts['priorities'] == 0 || $counts['categories'] == 0) {
+            throw new \Exception('Failed to seed required data');
         }
 
-        // Get priorities
-            $priorities = [];
-            $stmt = $pdo->query("SELECT id, name FROM ticketit_priorities ORDER BY name");
-            while ($row = $stmt->fetch(\PDO::FETCH_ASSOC)) {
-                $priorities[$row['id']] = $row['name'];
-        }
+        $connection = app('db')->connection();
+        
+        // Get categories and priorities using query builder
+        $categories = $connection->table('ticketit_categories')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+            
+        $priorities = $connection->table('ticketit_priorities')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
 
-            Log::info('Data retrieved for form:', [
-                'categories_count' => count($categories),
-                'priorities_count' => count($priorities)
+        Log::info('Form data retrieved:', [
+            'categories' => array_keys($categories),
+            'priorities' => array_keys($priorities)
         ]);
 
-            if (empty($categories) || empty($priorities)) {
-                Log::error('Categories or priorities are empty after seeding!');
-                throw new \Exception('Required data missing for ticket creation');
-        }
-
-            return view('ticketit::tickets.create_customer', [
-                'categories' => $categories,
-                'priorities' => $priorities,
-                'master' => 'layouts.app'
+        return view('ticketit::tickets.create_customer', [
+            'categories' => $categories,
+            'priorities' => $priorities,
+            'master' => 'layouts.app'
         ]);
 
-         } catch (\Exception $e) {
-            Log::error('Error in create:', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+    } catch (\Exception $e) {
+        Log::error('Error in create form: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
         ]);
 
-            return redirect()->back()
-                ->with('error', 'Error loading form: ' . $e->getMessage());
+        return redirect()->back()
+            ->with('error', 'Error loading form: ' . $e->getMessage());
     }
 }
     /**
