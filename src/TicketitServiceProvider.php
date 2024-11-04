@@ -24,10 +24,17 @@ class TicketitServiceProvider extends ServiceProvider
      *
      * @return void
      */
+
+
+     protected $commands = [
+        'Ticket\Ticketit\Console\Commands\SeedTicketit'
+    ];
+    
     public function boot()
     {
     
         $viewsDirectory = __DIR__.'/Views/bootstrap3';
+        $this->commands($this->commands);
         $this->loadViewsFrom($viewsDirectory, 'ticketit');
         $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
 
@@ -55,6 +62,10 @@ class TicketitServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/routes.php' => base_path('routes/ticketit/routes.php')
         ], 'ticketit-routes');
+
+        $this->commands([
+            'Ticket\Ticketit\Console\Commands\SeedTicketit'
+        ]);
 
         // Publish all assets
         $this->publishes([

@@ -4,9 +4,11 @@ namespace Ticket\Ticketit\Controllers;
 
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
+use Ticket\Ticketit\Traits\AuthChecks;
 
 class BaseTicketController extends Controller
 {
+    use AuthChecks;
     protected $tickets;
     protected $agent;
 

@@ -14,54 +14,69 @@ class CreateTicketitTable extends Migration
     public function up()
     {
         Schema::create('ticketit_statuses', function (Blueprint $table) {
-            $table->increments('id');
+            $table->bigInteger('id')->unsigned()->autoIncrement();
             $table->string('name');
             $table->string('color');
         });
 
         Schema::create('ticketit_priorities', function (Blueprint $table) {
-            $table->increments('id');
+            $table->bigInteger('id')->unsigned()->autoIncrement();
             $table->string('name');
             $table->string('color');
         });
 
         Schema::create('ticketit_categories', function (Blueprint $table) {
-            $table->increments('id');
+            $table->bigInteger('id')->unsigned()->autoIncrement();
             $table->string('name');
             $table->string('color');
         });
 
         Schema::create('ticketit_categories_users', function (Blueprint $table) {
-            $table->unsignedBigInteger('category_id');
-            $table->unsignedBigInteger('user_id')->nullable();
+            $table->bigInteger('category_id')->unsigned();
+            $table->bigInteger('user_id')->unsigned()->nullable();
+            
+            $table->foreign('category_id')->references('id')->on('ticketit_categories');
+            $table->foreign('user_id')->references('id')->on('users');
         });
 
         Schema::create('ticketit', function (Blueprint $table) {
-            $table->increments('id');
+            $table->bigInteger('id')->unsigned()->autoIncrement();
             $table->string('subject');
             $table->longText('content');
-            $table->unsignedBigInteger('status_id');
-            $table->unsignedBigInteger('priority_id');
-            $table->unsignedBigInteger('user_id')->nullable();
-            $table->unsignedBigInteger('agent_id')->nullable();
-            $table->unsignedBigInteger('category_id');
+            $table->bigInteger('status_id')->unsigned();
+            $table->bigInteger('priority_id')->unsigned();
+            $table->bigInteger('user_id')->unsigned()->nullable();
+            $table->bigInteger('agent_id')->unsigned()->nullable();
+            $table->bigInteger('category_id')->unsigned();
             $table->timestamps();
+
+            $table->foreign('status_id')->references('id')->on('ticketit_statuses');
+            $table->foreign('priority_id')->references('id')->on('ticketit_priorities');
+            $table->foreign('user_id')->references('id')->on('users');
+            $table->foreign('agent_id')->references('id')->on('users');
+            $table->foreign('category_id')->references('id')->on('ticketit_categories');
         });
 
         Schema::create('ticketit_comments', function (Blueprint $table) {
-            $table->increments('id');
+            $table->bigInteger('id')->unsigned()->autoIncrement();
             $table->text('content');
-            $table->unsignedBigInteger('user_id')->nullable();
-            $table->unsignedBigInteger('ticket_id');
+            $table->bigInteger('user_id')->unsigned()->nullable();
+            $table->bigInteger('ticket_id')->unsigned();
             $table->timestamps();
+
+            $table->foreign('user_id')->references('id')->on('users');
+            $table->foreign('ticket_id')->references('id')->on('ticketit');
         });
 
         Schema::create('ticketit_audits', function (Blueprint $table) {
-            $table->increments('id');
+            $table->bigInteger('id')->unsigned()->autoIncrement();
             $table->text('operation');
-            $table->unsignedBigInteger('user_id')->nullable();
-            $table->unsignedBigInteger('ticket_id');
+            $table->bigInteger('user_id')->unsigned()->nullable();
+            $table->bigInteger('ticket_id')->unsigned();
             $table->timestamps();
+
+            $table->foreign('user_id')->references('id')->on('users');
+            $table->foreign('ticket_id')->references('id')->on('ticketit');
         });
     }
 
@@ -72,13 +87,12 @@ class CreateTicketitTable extends Migration
      */
     public function down()
     {
-        Schema::drop('ticketit_audits');
-        Schema::drop('ticketit_comments');
-        Schema::drop('ticketit');
-        Schema::drop('ticketit_categories_users');
-        Schema::drop('ticketit_categories');
-        Schema::drop('ticketit_priorities');
-        Schema::drop('ticketit_statuses');
+        Schema::dropIfExists('ticketit_audits');
+        Schema::dropIfExists('ticketit_comments');
+        Schema::dropIfExists('ticketit');
+        Schema::dropIfExists('ticketit_categories_users');
+        Schema::dropIfExists('ticketit_categories');
+        Schema::dropIfExists('ticketit_priorities');
+        Schema::dropIfExists('ticketit_statuses');
     }
-
 }

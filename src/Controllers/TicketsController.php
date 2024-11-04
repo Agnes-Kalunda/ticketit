@@ -17,9 +17,12 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Routing\Controller;
+use Ticket\Ticketit\Traits\AuthChecks;
 
 class TicketsController extends Controller
 {
+
+    
     protected $tickets;
     protected $agent;
 
@@ -29,26 +32,37 @@ class TicketsController extends Controller
      * @param Ticket $tickets
      * @param Agent $agent
      */
+
+    public function isCustomer()
+     {
+         return Auth::guard('customer')->check();
+     }
+
+    public function isAdmin()
+    {
+        return Auth::guard('web')->check() && Auth::user()->ticketit_admin;
+    }
+
+    public function isAgent()
+    {
+        return Auth::guard('web')->check() && Auth::user()->ticketit_agent;
+    }
     public function __construct(Ticket $tickets, Agent $agent)
-    {
-        $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
-        $this->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware', ['only' => ['edit', 'update']]);
-        $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['destroy']]);
+{
+    $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['show']]);
+    $this->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware', ['only' => ['edit', 'update']]);
+    $this->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware', ['only' => ['destroy']]);
 
-        $this->tickets = $tickets;
-        $this->agent = $agent;
+    $this->tickets = $tickets;
+    $this->agent = $agent;
+
+    // Force seed default data
+    try {
+        $this->seedDefaultData();
+    } catch (\Exception $e) {
+        Log::error('Error seeding default data: ' . $e->getMessage());
     }
-
-    /**
-     * Determine if the current user is a customer
-     *
-     * @return bool
-     */
-    protected function isCustomer()
-    {
-        return Auth::guard('customer')->check();
-    }
-
+}
     /**
      * Get authenticated user (either customer or user)
      *
@@ -68,21 +82,52 @@ class TicketsController extends Controller
      * @return \Illuminate\View\View
      */
     public function customerIndex()
-    {
+{
+    try {
         if (!$this->isCustomer()) {
+            Log::warning('Non-customer attempted to view tickets');
             return redirect()->route('home')
                 ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
         }
 
+        $customerId = $this->getAuthUser()->id;
+        
+        Log::info('Fetching tickets for customer:', ['customer_id' => $customerId]);
+
+        // Get tickets query
         $tickets = $this->tickets
-            ->where('customer_id', $this->getAuthUser()->id)
-            ->with(['status', 'priority', 'category', 'agent'])
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
+            ->where('customer_id', $customerId)
+            ->with(['status', 'priority', 'category'])
+            ->orderBy('created_at', 'desc');
 
-        return view('ticketit::tickets.index_customer', compact('tickets'));
+        // Log the raw SQL query
+        Log::info('Ticket query:', [
+            'sql' => $tickets->toSql(),
+            'bindings' => $tickets->getBindings()
+        ]);
+
+        // Execute query with pagination
+        $tickets = $tickets->paginate(10);
+
+        // Log results
+        Log::info('Tickets found:', [
+            'count' => $tickets->count(),
+            'total' => $tickets->total()
+        ]);
+
+    
+        return view('ticketit::tickets.customer.index', compact('tickets'));
+
+    } catch (\Exception $e) {
+        Log::error('Error fetching customer tickets: ' . $e->getMessage(), [
+            'customer_id' => $this->getAuthUser()->id,
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return redirect()->back()
+            ->with('error', 'Error loading tickets. Please try again.');
     }
-
+}
     /**
      * Get table data for datatables
      *
@@ -468,20 +513,39 @@ class TicketsController extends Controller
             ->with('warning', 'Staff members cannot create tickets');
     }
 
-    // Check if we have categories and priorities, if not seed them
-    if (Models\Category::count() === 0 || Models\Priority::count() === 0) {
+    try {
+        Log::info('Starting ticket creation form...');
+
+        // Force seed data - remove the if condition
+        Log::info('Seeding default data...');
         $this->seedDefaultData();
+
+        // Get fresh data
+        $categories = Models\Category::orderBy('name')->get();
+        $priorities = Models\Priority::orderBy('name')->get();
+
+        // Debug log counts
+        Log::info('Current data counts:', [
+            'categories' => $categories->count(),
+            'priorities' => $priorities->count()
+        ]);
+
+        return view('ticketit::tickets.create_customer', [
+            'categories' => $categories->pluck('name', 'id'),
+            'priorities' => $priorities->pluck('name', 'id'),
+            'master' => 'layouts.app'
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error in create:', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return redirect()->back()
+            ->with('error', 'Error loading form: ' . $e->getMessage());
     }
-
-    list($priorities, $categories) = $this->PCS();
-    
-    return view('ticketit::tickets.create_customer', [
-        'priorities' => $priorities,
-        'categories' => $categories,
-        'master' => 'layouts.app'
-    ]);
 }
-
     /**
      * Store a new ticket
      *
@@ -489,8 +553,16 @@ class TicketsController extends Controller
      * @return \Illuminate\Http\RedirectResponse
      */
     public function store(Request $request)
-    {
+{
+    try {
+        // Log incoming request
+        Log::info('Ticket submission attempt:', [
+            'customer_id' => $this->getAuthUser()->id,
+            'request_data' => $request->all()
+        ]);
+
         if (!$this->isCustomer()) {
+            Log::warning('Non-customer attempted to create ticket');
             return redirect()->route(Setting::grab('main_route').'.index')
                 ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
         }
@@ -503,33 +575,53 @@ class TicketsController extends Controller
         ]);
 
         if ($validator->fails()) {
+            Log::error('Validation failed:', ['errors' => $validator->errors()->toArray()]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
         }
 
-        try {
-            $ticket = new Ticket();
-            $ticket->subject = $request->subject;
-            $ticket->setPurifiedContent($request->get('content'));
-            $ticket->priority_id = $request->priority_id;
-            $ticket->category_id = $request->category_id;
-            $ticket->status_id = Setting::grab('default_status_id');
-            $ticket->customer_id = $this->getAuthUser()->id;
-            $ticket->autoSelectAgent();
-            $ticket->save();
-
-            return redirect()->route('customer.tickets.index')
-                ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
-                
-        } catch (\Exception $e) {
-            Log::error('Ticket creation failed: ' . $e->getMessage());
-            return redirect()->back()
-                ->with('error', trans('ticketit::lang.ticket-creation-error'))
-                ->withInput();
+        // Get default open status
+        $status = Status::where('name', 'Open')->first();
+        if (!$status) {
+            Log::error('Default status not found');
+            throw new \Exception('Default status not found');
         }
-    }
 
+        $ticket = new Ticket();
+        $ticket->subject = $request->subject;
+        $ticket->content = $request->content;  // Changed from setPurifiedContent
+        $ticket->priority_id = $request->priority_id;
+        $ticket->category_id = $request->category_id;
+        $ticket->status_id = $status->id;
+        $ticket->customer_id = $this->getAuthUser()->id;
+
+        // Log ticket data before save
+        Log::info('Attempting to save ticket:', [
+            'ticket_data' => $ticket->toArray()
+        ]);
+
+        if (!$ticket->save()) {
+            Log::error('Failed to save ticket');
+            throw new \Exception('Failed to save ticket');
+        }
+
+        Log::info('Ticket created successfully', ['ticket_id' => $ticket->id]);
+
+        return redirect()->route('customer.tickets.index')
+            ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
+                
+    } catch (\Exception $e) {
+        Log::error('Ticket creation failed: ' . $e->getMessage(), [
+            'exception' => $e,
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+            ->withInput();
+    }
+}
     /**
      * Display ticket
      *
