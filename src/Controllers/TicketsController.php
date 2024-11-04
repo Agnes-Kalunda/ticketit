@@ -419,145 +419,85 @@ class TicketsController extends Controller
     protected function seedDefaultData()
     {
         try {
-            Log::info('Starting targeted seeding for priorities and categories...');
-            
-            // Get connection
             $connection = app('db')->connection();
             
-            // Only seed priorities if empty
-            $priorityCount = $connection->table('ticketit_priorities')->count();
-            if ($priorityCount == 0) {
-                Log::info('Seeding priorities...');
-                
-                $now = date('Y-m-d H:i:s');
-                $connection->table('ticketit_priorities')->insert([
-                    [
-                        'name' => 'Low',
-                        'color' => '#069900',
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ],
-                    [
-                        'name' => 'Medium',
-                        'color' => '#e1d200',
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ],
-                    [
-                        'name' => 'High',
-                        'color' => '#e10000',
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ]
-                ]);
-                
-                Log::info('Priorities seeded successfully');
-            }
+            // Seed statuses
+            $connection->insert("INSERT INTO ticketit_statuses (name, color, created_at, updated_at) VALUES 
+                ('Open', '#f39c12', NOW(), NOW()),
+                ('In Progress', '#3498db', NOW(), NOW()),
+                ('Closed', '#2ecc71', NOW(), NOW())"
+            );
 
-            // Only seed categories if empty
-            $categoryCount = $connection->table('ticketit_categories')->count();
-            if ($categoryCount == 0) {
-                Log::info('Seeding categories...');
-                
-                $now = date('Y-m-d H:i:s');
-                $connection->table('ticketit_categories')->insert([
-                    [
-                        'name' => 'Technical',
-                        'color' => '#0014f4',
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ],
-                    [
-                        'name' => 'Billing',
-                        'color' => '#2b9900',
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ],
-                    [
-                        'name' => 'Customer Service',
-                        'color' => '#7e0099',
-                        'created_at' => $now,
-                        'updated_at' => $now
-                    ]
-                ]);
-                
-                Log::info('Categories seeded successfully');
-            }
+            // Seed priorities
+            $connection->insert("INSERT INTO ticketit_priorities (name, color, created_at, updated_at) VALUES 
+                ('Low', '#069900', NOW(), NOW()),
+                ('Medium', '#e1d200', NOW(), NOW()),
+                ('High', '#e10000', NOW(), NOW())"
+            );
 
-            // Verify seeding
-            $finalCounts = [
-                'priorities' => $connection->table('ticketit_priorities')->count(),
-                'categories' => $connection->table('ticketit_categories')->count()
-            ];
-            
-            Log::info('Final counts:', $finalCounts);
+            // Seed categories
+            $connection->insert("INSERT INTO ticketit_categories (name, color, created_at, updated_at) VALUES 
+                ('Technical', '#0014f4', NOW(), NOW()),
+                ('Billing', '#2b9900', NOW(), NOW()),
+                ('Customer Service', '#7e0099', NOW(), NOW())"
+            );
 
-            // Clear cache
             Cache::forget('ticketit::priorities');
             Cache::forget('ticketit::categories');
+            Cache::forget('ticketit::statuses');
 
-            return $finalCounts;
+            return true;
 
         } catch (\Exception $e) {
-            Log::error('Error seeding data: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
+            Log::error('Seeding error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+
+    /**
+     * Modified create method using database connection
+     */
+    public function create()
+    {
+        if (!$this->isCustomer()) {
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', 'Staff members cannot create tickets');
+        }
+
+        try {
+            // Force seed
+            $this->seedDefaultData();
+
+            $connection = app('db')->connection();
+
+            // Get data for dropdowns
+            $categories = $connection->select("SELECT id, name FROM ticketit_categories ORDER BY name");
+            $priorities = $connection->select("SELECT id, name FROM ticketit_priorities ORDER BY name");
+
+            // Convert to key-value pairs
+            $categoryList = [];
+            $priorityList = [];
+
+            foreach ($categories as $category) {
+                $categoryList[$category->id] = $category->name;
+            }
+
+            foreach ($priorities as $priority) {
+                $priorityList[$priority->id] = $priority->name;
+            }
+
+            return view('ticketit::tickets.create_customer', [
+                'categories' => $categoryList,
+                'priorities' => $priorityList,
+                'master' => 'layouts.app'
             ]);
-            throw $e;
+
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error loading form: ' . $e->getMessage());
         }
-
     }
-
-/**
- * Modified create method using database connection
- */
-public function create()
-{
-    if (!$this->isCustomer()) {
-        return redirect()->route(Setting::grab('main_route').'.index')
-            ->with('warning', 'Staff members cannot create tickets');
-    }
-
-    try {
-        // Force seed data and get counts
-        $counts = $this->seedDefaultData();
-        
-        if ($counts['priorities'] == 0 || $counts['categories'] == 0) {
-            throw new \Exception('Failed to seed required data');
-        }
-
-        $connection = app('db')->connection();
-        
-        // Get categories and priorities using query builder
-        $categories = $connection->table('ticketit_categories')
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
-            
-        $priorities = $connection->table('ticketit_priorities')
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->all();
-
-        Log::info('Form data retrieved:', [
-            'categories' => array_keys($categories),
-            'priorities' => array_keys($priorities)
-        ]);
-
-        return view('ticketit::tickets.create_customer', [
-            'categories' => $categories,
-            'priorities' => $priorities,
-            'master' => 'layouts.app'
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('Error in create form: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return redirect()->back()
-            ->with('error', 'Error loading form: ' . $e->getMessage());
-    }
-}
     /**
      * Store a new ticket
      *
