@@ -328,6 +328,37 @@ class TicketsController extends Controller
         }
     }
 
+
+    public function index()
+    {
+        try {
+            if (!$this->isCustomer()) {
+                return redirect()->route('home')
+                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
+            }
+
+            $customer = $this->getAuthUser();
+            
+            // Get tickets query
+            $tickets = $this->tickets
+                ->where('customer_id', $customer->id)
+                ->with(['status', 'priority', 'category'])
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+
+            return view('ticketit::tickets.customer.index', compact('tickets'));
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching customer tickets: ' . $e->getMessage(), [
+                'customer_id' => $this->getAuthUser()->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Error loading tickets. Please try again.');
+        }
+    }
+
     public function show($id)
     {
         $ticket = $this->tickets->findOrFail($id);
