@@ -374,25 +374,33 @@ class TicketsController extends Controller
      */
     protected function PCS()
 {
-    $time = LaravelVersion::min('5.8') ? 60 * 60 : 60;
+    $time = LaravelVersion::min('5.8') ? 60*60 : 60;
 
     try {
+        // Get priorities
         $priorities = Cache::remember('ticketit::priorities', $time, function () {
             return Models\Priority::orderBy('name')->get();
         });
 
+        // Get categories
         $categories = Cache::remember('ticketit::categories', $time, function () {
             return Models\Category::orderBy('name')->get();
         });
 
+        // Get statuses
         $statuses = Cache::remember('ticketit::statuses', $time, function () {
             return Models\Status::orderBy('name')->get();
         });
 
-        // Seed default data if any collections are empty
-        if ($priorities->isEmpty() || $categories->isEmpty() || $statuses->isEmpty()) {
+        // First check if there's data
+        if ($priorities->isEmpty() && $categories->isEmpty()) {
+            // Seed some default data
             $this->seedDefaultData();
-            return $this->PCS(); 
+            
+            // Fetch again
+            $priorities = Models\Priority::orderBy('name')->get();
+            $categories = Models\Category::orderBy('name')->get();
+            $statuses = Models\Status::orderBy('name')->get();
         }
 
         return [
@@ -410,38 +418,86 @@ class TicketsController extends Controller
 
     protected function seedDefaultData()
 {
-    // Refactored seeding logic could be moved to a private method
-        $this->seedIfEmpty(Models\Priority::class, [
-            ['name' => 'Low', 'color' => '#069900'],
-            ['name' => 'Medium', 'color' => '#e1d200'],
-            ['name' => 'High', 'color' => '#e10000'],
-    ]);
+        try {
+        // Seed default priorities if none exist
+            if (Models\Priority::count() === 0) {
+                Models\Priority::insert([
+                    [
+                        'name' => 'Low',
+                        'color' => '#069900',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Medium',
+                        'color' => '#e1d200',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'High',
+                        'color' => '#e10000',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ]
+            ]);
+        }
 
-        $this->seedIfEmpty(Models\Category::class, [
-            ['name' => 'Technical', 'color' => '#0014f4'],
-            ['name' => 'Billing', 'color' => '#2b9900'],
-            ['name' => 'Customer Service', 'color' => '#7e0099'],
-    ]);
+        // Seed default categories if none exist
+            if (Models\Category::count() === 0) {
+                Models\Category::insert([
+                 [
+                        'name' => 'Technical',
+                        'color' => '#0014f4',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Billing',
+                        'color' => '#2b9900',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Customer Service',
+                        'color' => '#7e0099',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ]
+            ]);
+        }
 
-        $this->seedIfEmpty(Models\Status::class, [
-            ['name' => 'Open', 'color' => '#f39c12'],
-            ['name' => 'In Progress', 'color' => '#3498db'],
-            ['name' => 'Closed', 'color' => '#2ecc71'],
-    ]);
+        // Seed default statuses if none exist
+            if (Models\Status::count() === 0) {
+                Models\Status::insert([
+                [
+                        'name' => 'Open',
+                        'color' => '#f39c12',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'In Progress',
+                        'color' => '#3498db',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ],
+                [
+                        'name' => 'Closed',
+                        'color' => '#2ecc71',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                ]
+            ]);
+        }
 
-        Cache::forget('ticketit::priorities');
-        Cache::forget('ticketit::categories');
-        Cache::forget('ticketit::statuses');
-}
+        // Clear the cache after seeding
+            Cache::forget('ticketit::priorities');
+            Cache::forget('ticketit::categories');
+            Cache::forget('ticketit::statuses');
 
-
-
-    private function seedIfEmpty($model, array $data)
-{
-        if ($model::count() === 0) {
-            $model::insert(array_map(function ($item) {
-                return array_merge($item, ['created_at' => now(), 'updated_at' => now()]);
-        },  $data));
+     } catch (\Exception $e) {
+            Log::error('Error seeding default data: ' . $e->getMessage());
     }
 }
 
