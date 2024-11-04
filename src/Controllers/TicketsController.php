@@ -498,20 +498,51 @@ class TicketsController extends Controller
             ->with('warning', 'Staff members cannot create tickets');
     }
 
-    // Check if we have categories and priorities, if not seed them
-    if (Models\Category::count() === 0 || Models\Priority::count() === 0) {
-        $this->seedDefaultData();
+    try {
+        Log::info('Starting ticket creation form...');
+
+        // Force seed if tables are empty
+        if (Models\Category::count() === 0 || Models\Priority::count() === 0) {
+            Log::info('Tables empty, seeding data...');
+            $this->seedDefaultData();
+        }
+
+        // Get fresh data and log counts
+        $categories = Models\Category::orderBy('name')->get();
+        $priorities = Models\Priority::orderBy('name')->get();
+
+        Log::info('Retrieved form data:', [
+            'categories_count' => $categories->count(),
+            'priorities_count' => $priorities->count(),
+            'categories' => $categories->pluck('name')->toArray(),
+            'priorities' => $priorities->pluck('name')->toArray()
+        ]);
+
+        // Transform for view
+        $categoriesForView = $categories->pluck('name', 'id');
+        $prioritiesForView = $priorities->pluck('name', 'id');
+
+        Log::info('Form data ready for view:', [
+            'categories_for_view' => $categoriesForView->toArray(),
+            'priorities_for_view' => $prioritiesForView->toArray()
+        ]);
+
+        return view('ticketit::tickets.create_customer', [
+            'categories' => $categoriesForView,
+            'priorities' => $prioritiesForView,
+            'master' => 'layouts.app'
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error in ticket creation form:', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return redirect()->back()
+            ->with('error', 'Error loading form data: ' . $e->getMessage());
     }
-
-    list($priorities, $categories) = $this->PCS();
-    
-    return view('ticketit::tickets.create_customer', [
-        'priorities' => $priorities,
-        'categories' => $categories,
-        'master' => 'layouts.app'
-    ]);
 }
-
     /**
      * Store a new ticket
      *
