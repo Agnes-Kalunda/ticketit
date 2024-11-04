@@ -39,12 +39,15 @@ class TicketsController extends Controller
     protected function ensureDefaultDataExists()
 {
     try {
-        if (Category::count() === 0 || Priority::count() === 0 || Status::count() === 0) {
+        $categoryCount = Category::count();
+        $priorityCount = Priority::count();
+        $statusCount = Status::count();
+
+        if ($categoryCount === 0 || $priorityCount === 0 || $statusCount === 0) {
             $seeder = new TicketitTableSeeder();
             $seeder->run();
         }
     } catch (\Exception $e) {
-        
         Log::error('Error ensuring default data exists: ' . $e->getMessage());
     }
 }
