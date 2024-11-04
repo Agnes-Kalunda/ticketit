@@ -56,6 +56,10 @@ class TicketitServiceProvider extends ServiceProvider
             __DIR__.'/routes.php' => base_path('routes/ticketit/routes.php')
         ], 'ticketit-routes');
 
+        $this->commands([
+            'Ticket\Ticketit\Console\Commands\SeedTicketit'
+        ]);
+
         // Publish all assets
         $this->publishes([
             $viewsDirectory => base_path('resources/views/vendor/ticketit'),
