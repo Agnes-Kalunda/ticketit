@@ -288,6 +288,7 @@ class TicketsController extends Controller
         ]);
 
         if ($validator->fails()) {
+            Log::error('Validation failed:', ['errors' => $validator->errors()->toArray()]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
@@ -297,32 +298,23 @@ class TicketsController extends Controller
         $connection->beginTransaction();
 
         try {
-        
-            $category = Category::where('name', $request->category_name)->first();
-            if (!$category) {
-                $category = Category::create([
-                    'name' => $request->category_name,
-                    'color' => $this->getCategoryColor($request->category_name)
-                ]);
-            }
+            // Get category
+            $category = Category::firstOrCreate(
+                ['name' => $request->category_name],
+                ['color' => $this->getCategoryColor($request->category_name)]
+            );
 
-            
-            $priority = Priority::where('name', $request->priority_name)->first();
-            if (!$priority) {
-                $priority = Priority::create([
-                    'name' => $request->priority_name,
-                    'color' => $this->getPriorityColor($request->priority_name)
-                ]);
-            }
+            // Get priority
+            $priority = Priority::firstOrCreate(
+                ['name' => $request->priority_name],
+                ['color' => $this->getPriorityColor($request->priority_name)]
+            );
 
             // Get default open status
-            $status = Status::where('name', 'Open')->first();
-            if (!$status) {
-                $status = Status::create([
-                    'name' => 'Open',
-                    'color' => '#f39c12'
-                ]);
-            }
+            $status = Status::firstOrCreate(
+                ['name' => 'Open'],
+                ['color' => '#f39c12']
+            );
 
             $ticket = new Ticket();
             $ticket->subject = $request->subject;
@@ -338,12 +330,6 @@ class TicketsController extends Controller
 
             $connection->commit();
 
-            Log::info('Ticket created successfully:', [
-                'ticket_id' => $ticket->id,
-                'category' => $category->name,
-                'priority' => $priority->name
-            ]);
-
             return redirect()->route('customer.tickets.index')
                 ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
 
@@ -351,7 +337,6 @@ class TicketsController extends Controller
             $connection->rollBack();
             throw $e;
         }
-                
     } catch (\Exception $e) {
         Log::error('Ticket creation failed: ' . $e->getMessage());
         return redirect()->back()
@@ -359,8 +344,7 @@ class TicketsController extends Controller
             ->withInput();
     }
 }
-
-    private function getCategoryColor($name)
+    protected function getCategoryColor($name)
     {
         $colors = [
             'Technical' => '#0014f4',
@@ -370,7 +354,7 @@ class TicketsController extends Controller
         return $colors[$name] ?? '#000000';
     }
 
-    private function getPriorityColor($name)
+    protected function getPriorityColor($name)
 {
     $colors = [
         'Low' => '#069900',
@@ -389,19 +373,15 @@ class TicketsController extends Controller
                     ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
             }
 
-            $customer = $this->getAuthUser();
-            
-            // Get tickets query
-            $tickets = $this->tickets
-                ->where('customer_id', $customer->id)
-                ->with(['status', 'priority', 'category'])
-                ->orderBy('created_at', 'desc')
-                ->paginate(10);
+            $tickets = Ticket::where('customer_id', $this->getAuthUser()->id)
+                            ->with(['status', 'priority', 'category'])
+                            ->orderBy('created_at', 'desc')
+                            ->get();
 
             return view('ticketit::tickets.customer.index', compact('tickets'));
 
         } catch (\Exception $e) {
-            Log::error('Error fetching customer tickets: ' . $e->getMessage(), [
+            Log::error('Error loading tickets: ' . $e->getMessage(), [
                 'customer_id' => $this->getAuthUser()->id,
                 'trace' => $e->getTraceAsString()
             ]);
@@ -410,7 +390,6 @@ class TicketsController extends Controller
                 ->with('error', 'Error loading tickets. Please try again.');
         }
     }
-
     public function show($id)
     {
         $ticket = $this->tickets->findOrFail($id);
