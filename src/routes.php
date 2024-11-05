@@ -22,25 +22,19 @@ Route::group([
     'middleware' => ['web', 'auth:customer'],
     'prefix' => 'customer/tickets'
 ], function () {
-    
     Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@index')
         ->name('customer.tickets.index');
-        
-    // Create ticket
+    // Create tickets
     Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
         ->name('customer.tickets.create');
     
-    // Store ticket
+    // Store tickets
     Route::post('/', 'Ticket\Ticketit\Controllers\TicketsController@store')
         ->name('customer.tickets.store');
         
-    // Show ticket
+    // Ticket details
     Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@show')
         ->name('customer.tickets.show');
-
-    // Comments for customers
-    Route::post('/{ticket}/comments', 'Ticket\Ticketit\Controllers\CommentsController@store')
-        ->name('customer.comments.store');
 });
 
 // Staff/Admin Routes

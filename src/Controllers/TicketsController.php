@@ -399,36 +399,50 @@ class TicketsController extends Controller
             return redirect()->back()
                 ->with('error', 'Error loading tickets. Please try again.');
         }
-}    public function show($id)
+}    
+    public function show($id)
     {
-        $ticket = $this->tickets->findOrFail($id);
-
-        if ($this->isCustomer()) {
-            if ($ticket->customer_id != $this->getAuthUser()->id) {
-                return redirect()->route('customer.tickets.index')
-                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+        try {
+            if (!$this->isCustomer()) {
+                return redirect()->route('home')
+                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
             }
 
-            $comments = $ticket->comments()
-                ->orderBy('created_at', 'desc')
-                ->paginate(Setting::grab('paginate_items'));
+            $customer = $this->getAuthUser();
             
-            return view('ticketit::tickets.show_customer', compact('ticket', 'comments'));
+            // Get ticket info
+            $ticket = app('db')->connection()
+                ->table('ticketit')
+                ->where('ticketit.customer_id', $customer->id)
+                ->where('ticketit.id', $id)
+                ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+                ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+                ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+                ->select([
+                    'ticketit.*',
+                    'ticketit_statuses.name as status_name',
+                    'ticketit_statuses.color as status_color',
+                    'ticketit_priorities.name as priority_name',
+                    'ticketit_priorities.color as priority_color',
+                    'ticketit_categories.name as category_name',
+                    'ticketit_categories.color as category_color'
+                ])
+                ->first();
+
+            if (!$ticket) {
+                return redirect()->route('customer.tickets.index')
+                    ->with('error', 'Ticket not found.');
+            }
+
+            
+            return view('ticketit::bootstrap3.tickets.showTicket', compact('ticket'));
+
+        } catch (\Exception $e) {
+            Log::error('Error showing ticket: ' . $e->getMessage());
+            return redirect()->route('customer.tickets.index')
+                ->with('error', 'Error loading ticket. Please try again.');
         }
-
-        list($priority_lists, $category_lists, $status_lists) = $this->PCS();
-        $close_perm = $this->permToClose($id);
-        $reopen_perm = $this->permToReopen($id);
-        $cat_agents = Category::find($ticket->category_id)->agents()->agentsLists();
-        $agent_lists = is_array($cat_agents) ? ['auto' => 'Auto Select'] + $cat_agents : ['auto' => 'Auto Select'];
-        $comments = $ticket->comments()->paginate(Setting::grab('paginate_items'));
-
-        return view('ticketit::tickets.show', compact(
-            'ticket', 'status_lists', 'priority_lists', 'category_lists',
-            'agent_lists', 'comments', 'close_perm', 'reopen_perm'
-        ));
     }
-
     public function update(Request $request, $id)
     {
         if ($this->isCustomer()) {

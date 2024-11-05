@@ -1,4 +1,3 @@
-
 @extends('layouts.app')
 
 @section('content')
@@ -54,7 +53,12 @@
                                     @foreach($tickets as $ticket)
                                         <tr>
                                             <td>#{{ $ticket->id }}</td>
-                                            <td>{{ $ticket->subject }}</td>
+                                            <td>
+                                                <a href="{{ route('customer.tickets.show', $ticket->id) }}" 
+                                                   class="text-decoration-none text-primary">
+                                                    {{ $ticket->subject }}
+                                                </a>
+                                            </td>
                                             <td>
                                                 <span class="badge" style="background-color: {{ $ticket->status_color }}">
                                                     {{ $ticket->status_name }}
@@ -72,7 +76,7 @@
                                             </td>
                                             <td>{{ \Carbon\Carbon::parse($ticket->created_at)->diffForHumans() }}</td>
                                             <td>
-                                                <a href="{{ route('customer.tickets.index') }}" 
+                                                <a href="{{ route('customer.tickets.show', $ticket->id) }}" 
                                                    class="btn btn-sm btn-primary">View</a>
                                             </td>
                                         </tr>
@@ -97,6 +101,19 @@
 }
 table th {
     background-color: #f8f9fa;
+}
+.text-decoration-none:hover {
+    text-decoration: underline !important;
+}
+table td {
+    vertical-align: middle;
+}
+.table a:not(.btn) {
+    color: #007bff;
+}
+.table a:not(.btn):hover {
+    color: #0056b3;
+    text-decoration: underline;
 }
 </style>
 @endpush
