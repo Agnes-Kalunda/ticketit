@@ -270,11 +270,6 @@ class TicketsController extends Controller
     public function store(Request $request)
 {
     try {
-        Log::info('Ticket submission attempt:', [
-            'customer_id' => $this->getAuthUser()->id,
-            'request_data' => $request->all()
-        ]);
-
         if (!$this->isCustomer()) {
             return redirect()->route(Setting::grab('main_route').'.index')
                 ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
@@ -288,7 +283,6 @@ class TicketsController extends Controller
         ]);
 
         if ($validator->fails()) {
-            Log::error('Validation failed:', ['errors' => $validator->errors()->toArray()]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
@@ -331,7 +325,7 @@ class TicketsController extends Controller
             $connection->commit();
 
             return redirect()->route('customer.tickets.index')
-                ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
+                ->with('success', 'Ticket has been created successfully!');
 
         } catch (\Exception $e) {
             $connection->rollBack();
@@ -343,7 +337,8 @@ class TicketsController extends Controller
             ->with('error', 'Failed to create ticket: ' . $e->getMessage())
             ->withInput();
     }
-}
+
+}  
     protected function getCategoryColor($name)
     {
         $colors = [
@@ -368,7 +363,12 @@ class TicketsController extends Controller
     public function index()
     {
         try {
-            $customer = Auth::guard('customer')->user();
+            if (!$this->isCustomer()) {
+                return redirect()->route('home')
+                    ->with('warning', 'You are not permitted to access this page.');
+            }
+
+            $customer = $this->getAuthUser();
             
             $tickets = app('db')->connection()
                 ->table('ticketit')
@@ -388,22 +388,18 @@ class TicketsController extends Controller
                 ->orderBy('ticketit.created_at', 'desc')
                 ->get();
 
-        
-            dd([
-                'customer_id' => $customer->id,
-                'tickets' => $tickets->toArray(),
-                'first_ticket' => $tickets->first()
-            ]);
-
             return view('ticketit::tickets.customer.index', compact('tickets'));
 
         } catch (\Exception $e) {
-            report($e);
+            Log::error('Error loading tickets: ' . $e->getMessage(), [
+                'customer_id' => $this->getAuthUser()->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return redirect()->back()
                 ->with('error', 'Error loading tickets. Please try again.');
         }
-    }
-    public function show($id)
+}    public function show($id)
     {
         $ticket = $this->tickets->findOrFail($id);
 

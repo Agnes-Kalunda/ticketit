@@ -1,4 +1,4 @@
-{{-- src/Views/tickets/customer/index.blade.php --}}
+
 @extends('layouts.app')
 
 @section('content')
@@ -14,15 +14,21 @@
                 </div>
 
                 <div class="card-body">
-                    @if(session('status'))
-                        <div class="alert alert-success">
-                            {{ session('status') }}
+                    @if(session('success'))
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            {{ session('success') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
                         </div>
                     @endif
 
                     @if(session('error'))
-                        <div class="alert alert-danger">
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             {{ session('error') }}
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
                         </div>
                     @endif
 
@@ -47,35 +53,27 @@
                                 <tbody>
                                     @foreach($tickets as $ticket)
                                         <tr>
-                                            <td>#{{ $ticket->id ?? 'N/A' }}</td>
-                                            <td>{{ $ticket->subject ?? 'N/A' }}</td>
+                                            <td>#{{ $ticket->id }}</td>
+                                            <td>{{ $ticket->subject }}</td>
                                             <td>
-                                                <span class="badge badge-status" style="background-color: {{ $ticket->status_color ?? '#6c757d' }}">
-                                                    {{ $ticket->status_name ?? 'Unknown' }}
+                                                <span class="badge" style="background-color: {{ $ticket->status_color }}">
+                                                    {{ $ticket->status_name }}
                                                 </span>
                                             </td>
                                             <td>
-                                                <span class="badge badge-priority" style="background-color: {{ $ticket->priority_color ?? '#6c757d' }}">
-                                                    {{ $ticket->priority_name ?? 'Unknown' }}
+                                                <span class="badge" style="background-color: {{ $ticket->priority_color }}">
+                                                    {{ $ticket->priority_name }}
                                                 </span>
                                             </td>
                                             <td>
-                                                <span class="badge badge-category" style="background-color: {{ $ticket->category_color ?? '#6c757d' }}">
-                                                    {{ $ticket->category_name ?? 'Unknown' }}
+                                                <span class="badge" style="background-color: {{ $ticket->category_color }}">
+                                                    {{ $ticket->category_name }}
                                                 </span>
                                             </td>
+                                            <td>{{ \Carbon\Carbon::parse($ticket->created_at)->diffForHumans() }}</td>
                                             <td>
-                                                @if($ticket->created_at)
-                                                    {{ \Carbon\Carbon::parse($ticket->created_at)->diffForHumans() }}
-                                                @else
-                                                    N/A
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if($ticket->id)
-                                                    <a href="{{ route('customer.tickets.show', $ticket->id) }}"
-                                                       class="btn btn-sm btn-primary">View</a>
-                                                @endif
+                                                <a href="{{ route('customer.tickets.index') }}" 
+                                                   class="btn btn-sm btn-primary">View</a>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -97,16 +95,8 @@
     padding: 0.35em 0.65em;
     font-size: 0.9em;
 }
-.badge-status, .badge-priority, .badge-category {
-    min-width: 70px;
-    display: inline-block;
-    text-align: center;
-}
 table th {
     background-color: #f8f9fa;
-}
-.table-responsive {
-    margin-top: 1rem;
 }
 </style>
 @endpush
