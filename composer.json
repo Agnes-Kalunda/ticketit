@@ -1,7 +1,7 @@
 {
     "name": "ticket/ticketit",
     "description": "Your custom ticket management system for Laravel",
-    "version":"4.0.4",
+    "version":"5.0.7",
     "type": "laravel-package",
     "keywords": ["laravel", "helpdesk", "ticket", "support", "your-keywords"],
     "require": {

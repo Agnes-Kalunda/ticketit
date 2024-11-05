@@ -13,18 +13,7 @@ class Priority extends Model
         'color',
     ];
 
-    protected static function boot()
-    {
-        parent::boot();
-        
-        // Auto-generate color if not provided
-        static::creating(function ($priority) {
-            if (!$priority->color) {
-                $priority->color = '#' . substr(md5($priority->name), 0, 6);
-            }
-        });
-    }
-
+    
     public function tickets()
     {
         return $this->hasMany(Ticket::class);

@@ -8,22 +8,7 @@ class Category extends Model
 {
     protected $table = 'ticketit_categories';
     
-    protected $fillable = [
-        'name',
-        'color',
-    ];
-
-    protected static function boot()
-    {
-        parent::boot();
-        
-        // Auto-generate color if not provided
-        static::creating(function ($category) {
-            if (!$category->color) {
-                $category->color = '#' . substr(md5($category->name), 0, 6);
-            }
-        });
-    }
+    protected $fillable = ['name', 'color'];
 
     public function tickets()
     {

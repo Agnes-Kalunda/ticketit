@@ -39,12 +39,15 @@ class TicketsController extends Controller
     protected function ensureDefaultDataExists()
 {
     try {
-        if (Category::count() === 0 || Priority::count() === 0 || Status::count() === 0) {
+        $categoryCount = Category::count();
+        $priorityCount = Priority::count();
+        $statusCount = Status::count();
+
+        if ($categoryCount === 0 || $priorityCount === 0 || $statusCount === 0) {
             $seeder = new TicketitTableSeeder();
             $seeder->run();
         }
     } catch (\Exception $e) {
-        
         Log::error('Error ensuring default data exists: ' . $e->getMessage());
     }
 }
@@ -70,6 +73,124 @@ class TicketsController extends Controller
             return Auth::guard('customer')->user();
         }
         return Auth::user();
+    }
+
+
+
+    
+    public function staffIndex()
+{
+    try {
+        if (!Auth::guard('web')->check()) {
+            return redirect()->route('login')
+                ->with('error', 'You must be logged in to access this page.');
+        }
+
+        $tickets = app('db')->connection()
+            ->table('ticketit')
+            ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+            ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+            ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+            ->join('customers', 'ticketit.customer_id', '=', 'customers.id')
+            ->select([
+                'ticketit.*',
+                'ticketit_statuses.name as status_name',
+                'ticketit_statuses.color as status_color',
+                'ticketit_priorities.name as priority_name',
+                'ticketit_priorities.color as priority_color',
+                'ticketit_categories.name as category_name',
+                'ticketit_categories.color as category_color',
+                'customers.name as customer_name'
+            ])
+            ->orderBy('ticketit.created_at', 'desc')
+            ->paginate(10);
+
+        return view('ticketit::bootstrap3.tickets.staff.index', compact('tickets'));
+
+    } catch (\Exception $e) {
+        Log::error('Error loading staff tickets: ' . $e->getMessage());
+        return redirect()->back()
+            ->with('error', 'Error loading tickets. Please try again.');
+    }
+}
+
+    public function updateStatus($id, $status)
+    {
+        try {
+            if (!Auth::guard('web')->check()) {
+                return redirect()->route('login')
+                    ->with('error', 'You must be logged in to perform this action.');
+            }
+
+            $statusMap = [
+                'open' => 'Open',
+                'in-progress' => 'In Progress',
+                'closed' => 'Closed'
+            ];
+
+            if (!isset($statusMap[$status])) {
+                throw new \Exception('Invalid status provided');
+            }
+
+            $statusRecord = Status::where('name', $statusMap[$status])->first();
+            if (!$statusRecord) {
+                throw new \Exception('Status not found in database');
+            }
+
+            $ticket = Ticket::findOrFail($id);
+            $ticket->status_id = $statusRecord->id;
+            $ticket->save();
+
+            return redirect()->back()
+                ->with('success', 'Ticket status updated successfully.');
+
+        } catch (\Exception $e) {
+            Log::error('Error updating ticket status: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Error updating ticket status. Please try again.');
+        }
+    }
+
+    public function staffShow($id)
+    {
+        try {
+            if (!Auth::guard('web')->check()) {
+                return redirect()->route('login')
+                    ->with('error', 'You must be logged in to view tickets.');
+            }
+
+            $ticket = app('db')->connection()
+                ->table('ticketit')
+                ->where('ticketit.id', $id)
+                ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+                ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+                ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+                ->join('customers', 'ticketit.customer_id', '=', 'customers.id')
+                ->select([
+                    'ticketit.*',
+                    'ticketit_statuses.name as status_name',
+                    'ticketit_statuses.color as status_color',
+                    'ticketit_priorities.name as priority_name',
+                    'ticketit_priorities.color as priority_color',
+                    'ticketit_categories.name as category_name',
+                    'ticketit_categories.color as category_color',
+                    'customers.name as customer_name',
+                    'customers.email as customer_email'
+                ])
+                ->first();
+
+            if (!$ticket) {
+                return redirect()->route('tickets.index')
+                    ->with('error', 'Ticket not found.');
+            }
+
+            return view('ticketit::bootstrap3.tickets.staff.show', compact('ticket'));
+
+        } catch (\Exception $e) {
+            Log::error('Error showing ticket to staff: ' . $e->getMessage());
+            return redirect()->route('tickets.index')
+                ->with('error', 'Error loading ticket. Please try again.');
+        }
     }
 
     public function data($complete = false)
@@ -265,96 +386,181 @@ class TicketsController extends Controller
     }
 
     public function store(Request $request)
-    {
-        try {
-            Log::info('Ticket submission attempt:', [
-                'customer_id' => $this->getAuthUser()->id,
-                'request_data' => $request->all()
-            ]);
+{
+    try {
+        if (!$this->isCustomer()) {
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+        }
 
-            if (!$this->isCustomer()) {
-                return redirect()->route(Setting::grab('main_route').'.index')
-                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
-            }
+        $validator = Validator::make($request->all(), [
+            'subject' => 'required|min:3',
+            'content' => 'required|min:6',
+            'category_name' => 'required|in:Technical,Billing,Customer Service',
+            'priority_name' => 'required|in:Low,Medium,High',
+        ]);
 
-            $validator = Validator::make($request->all(), [
-                'subject' => 'required|min:3',
-                'content' => 'required|min:6',
-                'category_id' => 'required|exists:ticketit_categories,id',
-                'priority_id' => 'required|exists:ticketit_priorities,id',
-            ]);
-
-            if ($validator->fails()) {
-                return redirect()->back()
-                    ->withErrors($validator)
-                    ->withInput();
-            }
-
-            $connection = app('db')->connection();
-            $connection->beginTransaction();
-
-            try {
-                $status = Status::where('name', 'Open')->firstOrFail();
-
-                $ticket = new Ticket();
-                $ticket->subject = $request->subject;
-                $ticket->content = $request->content;
-                $ticket->priority_id = $request->priority_id;
-                $ticket->category_id = $request->category_id;
-                $ticket->status_id = $status->id;
-                $ticket->customer_id = $this->getAuthUser()->id;
-
-                if (!$ticket->save()) {
-                    throw new \Exception('Failed to save ticket');
-                }
-
-                $connection->commit();
-                return redirect()->route('customer.tickets.index')
-                    ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
-
-            } catch (\Exception $e) {
-                $connection->rollBack();
-                throw $e;
-            }
-                
-        } catch (\Exception $e) {
-            Log::error('Ticket creation failed: ' . $e->getMessage());
+        if ($validator->fails()) {
             return redirect()->back()
-                ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+                ->withErrors($validator)
                 ->withInput();
         }
-    }
 
-    public function show($id)
-    {
-        $ticket = $this->tickets->findOrFail($id);
+        $connection = app('db')->connection();
+        $connection->beginTransaction();
 
-        if ($this->isCustomer()) {
-            if ($ticket->customer_id != $this->getAuthUser()->id) {
-                return redirect()->route('customer.tickets.index')
-                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+        try {
+            // Get category
+            $category = Category::firstOrCreate(
+                ['name' => $request->category_name],
+                ['color' => $this->getCategoryColor($request->category_name)]
+            );
+
+            // Get priority
+            $priority = Priority::firstOrCreate(
+                ['name' => $request->priority_name],
+                ['color' => $this->getPriorityColor($request->priority_name)]
+            );
+
+            // Get default open status
+            $status = Status::firstOrCreate(
+                ['name' => 'Open'],
+                ['color' => '#f39c12']
+            );
+
+            $ticket = new Ticket();
+            $ticket->subject = $request->subject;
+            $ticket->content = $request->content;
+            $ticket->priority_id = $priority->id;
+            $ticket->category_id = $category->id;
+            $ticket->status_id = $status->id;
+            $ticket->customer_id = $this->getAuthUser()->id;
+
+            if (!$ticket->save()) {
+                throw new \Exception('Failed to save ticket');
             }
 
-            $comments = $ticket->comments()
-                ->orderBy('created_at', 'desc')
-                ->paginate(Setting::grab('paginate_items'));
-            
-            return view('ticketit::tickets.show_customer', compact('ticket', 'comments'));
+            $connection->commit();
+
+            return redirect()->route('customer.tickets.index')
+                ->with('success', 'Ticket has been created successfully!');
+
+        } catch (\Exception $e) {
+            $connection->rollBack();
+            throw $e;
         }
-
-        list($priority_lists, $category_lists, $status_lists) = $this->PCS();
-        $close_perm = $this->permToClose($id);
-        $reopen_perm = $this->permToReopen($id);
-        $cat_agents = Category::find($ticket->category_id)->agents()->agentsLists();
-        $agent_lists = is_array($cat_agents) ? ['auto' => 'Auto Select'] + $cat_agents : ['auto' => 'Auto Select'];
-        $comments = $ticket->comments()->paginate(Setting::grab('paginate_items'));
-
-        return view('ticketit::tickets.show', compact(
-            'ticket', 'status_lists', 'priority_lists', 'category_lists',
-            'agent_lists', 'comments', 'close_perm', 'reopen_perm'
-        ));
+    } catch (\Exception $e) {
+        Log::error('Ticket creation failed: ' . $e->getMessage());
+        return redirect()->back()
+            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+            ->withInput();
     }
 
+}  
+    protected function getCategoryColor($name)
+    {
+        $colors = [
+            'Technical' => '#0014f4',
+            'Billing' => '#2b9900',
+            'Customer Service' => '#7e0099'
+        ];
+        return $colors[$name] ?? '#000000';
+    }
+
+    protected function getPriorityColor($name)
+{
+    $colors = [
+        'Low' => '#069900',
+        'Medium' => '#e1d200',
+        'High' => '#e10000'
+    ];
+    return $colors[$name] ?? '#000000';
+}
+
+
+    public function index()
+    {
+        try {
+            if (!$this->isCustomer()) {
+                return redirect()->route('home')
+                    ->with('warning', 'You are not permitted to access this page.');
+            }
+
+            $customer = $this->getAuthUser();
+            
+            $tickets = app('db')->connection()
+                ->table('ticketit')
+                ->where('customer_id', $customer->id)
+                ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+                ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+                ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+                ->select([
+                    'ticketit.*',
+                    'ticketit_statuses.name as status_name',
+                    'ticketit_statuses.color as status_color',
+                    'ticketit_priorities.name as priority_name',
+                    'ticketit_priorities.color as priority_color',
+                    'ticketit_categories.name as category_name',
+                    'ticketit_categories.color as category_color'
+                ])
+                ->orderBy('ticketit.created_at', 'desc')
+                ->get();
+
+            return view('ticketit::tickets.customer.index', compact('tickets'));
+
+        } catch (\Exception $e) {
+            Log::error('Error loading tickets: ' . $e->getMessage(), [
+                'customer_id' => $this->getAuthUser()->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Error loading tickets. Please try again.');
+        }
+}    
+    public function show($id)
+    {
+        try {
+            if (!$this->isCustomer()) {
+                return redirect()->route('home')
+                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
+            }
+
+            $customer = $this->getAuthUser();
+            
+            // Get ticket info
+            $ticket = app('db')->connection()
+                ->table('ticketit')
+                ->where('ticketit.customer_id', $customer->id)
+                ->where('ticketit.id', $id)
+                ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+                ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+                ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+                ->select([
+                    'ticketit.*',
+                    'ticketit_statuses.name as status_name',
+                    'ticketit_statuses.color as status_color',
+                    'ticketit_priorities.name as priority_name',
+                    'ticketit_priorities.color as priority_color',
+                    'ticketit_categories.name as category_name',
+                    'ticketit_categories.color as category_color'
+                ])
+                ->first();
+
+            if (!$ticket) {
+                return redirect()->route('customer.tickets.index')
+                    ->with('error', 'Ticket not found.');
+            }
+
+            
+            return view('ticketit::bootstrap3.tickets.showTicket', compact('ticket'));
+
+        } catch (\Exception $e) {
+            Log::error('Error showing ticket: ' . $e->getMessage());
+            return redirect()->route('customer.tickets.index')
+                ->with('error', 'Error loading ticket. Please try again.');
+        }
+    }
     public function update(Request $request, $id)
     {
         if ($this->isCustomer()) {
