@@ -1,4 +1,3 @@
-
 @extends('layouts.app')
 
 @section('content')
@@ -15,27 +14,27 @@
                     <div class="row mb-4">
                         <div class="col-md-3">
                             <strong>Customer:</strong>
-                            <p>{{ $ticket->customer_name }}</p>
+                            <p>{{ $ticket->customer->name ?? 'N/A' }}</p>
                         </div>
                         <div class="col-md-3">
                             <strong>Status:</strong>
                             <p>
-                                <span class="badge {{ getStatusClass($ticket->status_id) }}">
-                                    {{ getStatusName($ticket->status_id) }}
+                                <span class="badge {{ $ticket->status->class ?? 'bg-secondary' }}">
+                                    {{ $ticket->status->name ?? 'Unknown' }}
                                 </span>
                             </p>
                         </div>
                         <div class="col-md-3">
                             <strong>Priority:</strong>
                             <p>
-                                <span class="badge {{ getPriorityClass($ticket->priority_id) }}">
-                                    {{ getPriorityName($ticket->priority_id) }}
+                                <span class="badge {{ $ticket->priority->class ?? 'bg-secondary' }}">
+                                    {{ $ticket->priority->name ?? 'Unknown' }}
                                 </span>
                             </p>
                         </div>
                         <div class="col-md-3">
                             <strong>Created:</strong>
-                            <p>{{ \Carbon\Carbon::parse($ticket->created_at)->format('M d, Y H:i') }}</p>
+                            <p>{{ $ticket->created_at->format('M d, Y H:i') }}</p>
                         </div>
                     </div>
 
@@ -57,7 +56,7 @@
                             <form action="{{ route('staff.tickets.status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
                                 @csrf
                                 <select name="status" class="form-control">
-                                    @foreach(getStatuses() as $id => $name)
+                                    @foreach($statuses as $id => $name)
                                         <option value="{{ $id }}" {{ $ticket->status_id == $id ? 'selected' : '' }}>
                                             {{ $name }}
                                         </option>
@@ -73,34 +72,4 @@
         </div>
     </div>
 </div>
-
-@php
-function getStatuses() {
-    return [
-        1 => 'Open',
-        2 => 'Pending',
-        3 => 'Resolved',
-        4 => 'Closed'
-    ];
-}
-
-function getStatusClass($statusId) {
-    $classes = [
-        1 => 'bg-info',
-        2 => 'bg-warning',
-        3 => 'bg-success',
-        4 => 'bg-secondary'
-    ];
-    return $classes[$statusId] ?? 'bg-secondary';
-}
-
-function getPriorityClass($priorityId) {
-    $classes = [
-        1 => 'bg-success',
-        2 => 'bg-warning',
-        3 => 'bg-danger'
-    ];
-    return $classes[$priorityId] ?? 'bg-secondary';
-}
-@endphp
 @endsection
