@@ -368,24 +368,37 @@ class TicketsController extends Controller
     public function index()
     {
         try {
-            if (!$this->isCustomer()) {
-                return redirect()->route('home')
-                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
-            }
+            $customer = Auth::guard('customer')->user();
+            
+            $tickets = app('db')->connection()
+                ->table('ticketit')
+                ->where('customer_id', $customer->id)
+                ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+                ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+                ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+                ->select([
+                    'ticketit.*',
+                    'ticketit_statuses.name as status_name',
+                    'ticketit_statuses.color as status_color',
+                    'ticketit_priorities.name as priority_name',
+                    'ticketit_priorities.color as priority_color',
+                    'ticketit_categories.name as category_name',
+                    'ticketit_categories.color as category_color'
+                ])
+                ->orderBy('ticketit.created_at', 'desc')
+                ->get();
 
-            $tickets = Ticket::where('customer_id', $this->getAuthUser()->id)
-                            ->with(['status', 'priority', 'category'])
-                            ->orderBy('created_at', 'desc')
-                            ->get();
+        
+            dd([
+                'customer_id' => $customer->id,
+                'tickets' => $tickets->toArray(),
+                'first_ticket' => $tickets->first()
+            ]);
 
             return view('ticketit::tickets.customer.index', compact('tickets'));
 
         } catch (\Exception $e) {
-            Log::error('Error loading tickets: ' . $e->getMessage(), [
-                'customer_id' => $this->getAuthUser()->id,
-                'trace' => $e->getTraceAsString()
-            ]);
-
+            report($e);
             return redirect()->back()
                 ->with('error', 'Error loading tickets. Please try again.');
         }
