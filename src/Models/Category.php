@@ -13,17 +13,7 @@ class Category extends Model
         'color',
     ];
 
-    protected static function boot()
-    {
-        parent::boot();
-        
-        // Auto-generate color if not provided
-        static::creating(function ($category) {
-            if (!$category->color) {
-                $category->color = '#' . substr(md5($category->name), 0, 6);
-            }
-        });
-    }
+
 
     public function tickets()
     {

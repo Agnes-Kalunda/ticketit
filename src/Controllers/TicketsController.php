@@ -268,65 +268,117 @@ class TicketsController extends Controller
     }
 
     public function store(Request $request)
-    {
-        try {
-            Log::info('Ticket submission attempt:', [
-                'customer_id' => $this->getAuthUser()->id,
-                'request_data' => $request->all()
-            ]);
+{
+    try {
+        Log::info('Ticket submission attempt:', [
+            'customer_id' => $this->getAuthUser()->id,
+            'request_data' => $request->all()
+        ]);
 
-            if (!$this->isCustomer()) {
-                return redirect()->route(Setting::grab('main_route').'.index')
-                    ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
-            }
+        if (!$this->isCustomer()) {
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+        }
 
-            $validator = Validator::make($request->all(), [
-                'subject' => 'required|min:3',
-                'content' => 'required|min:6',
-                'category_id' => 'required|exists:ticketit_categories,id',
-                'priority_id' => 'required|exists:ticketit_priorities,id',
-            ]);
+        $validator = Validator::make($request->all(), [
+            'subject' => 'required|min:3',
+            'content' => 'required|min:6',
+            'category_name' => 'required|in:Technical,Billing,Customer Service',
+            'priority_name' => 'required|in:Low,Medium,High',
+        ]);
 
-            if ($validator->fails()) {
-                return redirect()->back()
-                    ->withErrors($validator)
-                    ->withInput();
-            }
-
-            $connection = app('db')->connection();
-            $connection->beginTransaction();
-
-            try {
-                $status = Status::where('name', 'Open')->firstOrFail();
-
-                $ticket = new Ticket();
-                $ticket->subject = $request->subject;
-                $ticket->content = $request->content;
-                $ticket->priority_id = $request->priority_id;
-                $ticket->category_id = $request->category_id;
-                $ticket->status_id = $status->id;
-                $ticket->customer_id = $this->getAuthUser()->id;
-
-                if (!$ticket->save()) {
-                    throw new \Exception('Failed to save ticket');
-                }
-
-                $connection->commit();
-                return redirect()->route('customer.tickets.index')
-                    ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
-
-            } catch (\Exception $e) {
-                $connection->rollBack();
-                throw $e;
-            }
-                
-        } catch (\Exception $e) {
-            Log::error('Ticket creation failed: ' . $e->getMessage());
+        if ($validator->fails()) {
             return redirect()->back()
-                ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+                ->withErrors($validator)
                 ->withInput();
         }
+
+        $connection = app('db')->connection();
+        $connection->beginTransaction();
+
+        try {
+        
+            $category = Category::where('name', $request->category_name)->first();
+            if (!$category) {
+                $category = Category::create([
+                    'name' => $request->category_name,
+                    'color' => $this->getCategoryColor($request->category_name)
+                ]);
+            }
+
+            
+            $priority = Priority::where('name', $request->priority_name)->first();
+            if (!$priority) {
+                $priority = Priority::create([
+                    'name' => $request->priority_name,
+                    'color' => $this->getPriorityColor($request->priority_name)
+                ]);
+            }
+
+            // Get default open status
+            $status = Status::where('name', 'Open')->first();
+            if (!$status) {
+                $status = Status::create([
+                    'name' => 'Open',
+                    'color' => '#f39c12'
+                ]);
+            }
+
+            $ticket = new Ticket();
+            $ticket->subject = $request->subject;
+            $ticket->content = $request->content;
+            $ticket->priority_id = $priority->id;
+            $ticket->category_id = $category->id;
+            $ticket->status_id = $status->id;
+            $ticket->customer_id = $this->getAuthUser()->id;
+
+            if (!$ticket->save()) {
+                throw new \Exception('Failed to save ticket');
+            }
+
+            $connection->commit();
+
+            Log::info('Ticket created successfully:', [
+                'ticket_id' => $ticket->id,
+                'category' => $category->name,
+                'priority' => $priority->name
+            ]);
+
+            return redirect()->route('customer.tickets.index')
+                ->with('status', trans('ticketit::lang.the-ticket-has-been-created'));
+
+        } catch (\Exception $e) {
+            $connection->rollBack();
+            throw $e;
+        }
+                
+    } catch (\Exception $e) {
+        Log::error('Ticket creation failed: ' . $e->getMessage());
+        return redirect()->back()
+            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+            ->withInput();
     }
+}
+
+    private function getCategoryColor($name)
+    {
+        $colors = [
+            'Technical' => '#0014f4',
+            'Billing' => '#2b9900',
+            'Customer Service' => '#7e0099'
+        ];
+        return $colors[$name] ?? '#000000';
+    }
+
+    private function getPriorityColor($name)
+{
+    $colors = [
+        'Low' => '#069900',
+        'Medium' => '#e1d200',
+        'High' => '#e10000'
+    ];
+    return $colors[$name] ?? '#000000';
+}
 
 
     public function index()
