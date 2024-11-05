@@ -24,20 +24,28 @@ Route::group([
 ], function () {
     Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@index')
         ->name('customer.tickets.index');
-    // Create tickets
     Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
         ->name('customer.tickets.create');
-    
-    // Store tickets
     Route::post('/', 'Ticket\Ticketit\Controllers\TicketsController@store')
         ->name('customer.tickets.store');
-        
-    // Ticket details
     Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@show')
         ->name('customer.tickets.show');
 });
 
-// Staff/Admin Routes
+// Staff Routes
+Route::group([
+    'middleware' => ['web', 'auth'],
+    'prefix' => 'staff/tickets'
+], function () {
+    Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@staffIndex')
+        ->name('staff.tickets.index');
+    Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@staffShow')
+        ->name('staff.tickets.show');
+    Route::post('/{ticket}/status', 'Ticket\Ticketit\Controllers\TicketsController@updateStatus')
+        ->name('staff.tickets.status.update');
+});
+
+// Staff/Admin Extended Routes
 Route::group([
     'middleware' => [\Ticket\Ticketit\Helpers\LaravelVersion::authMiddleware()],
     'prefix' => $main_route_path
@@ -46,33 +54,26 @@ Route::group([
     // Ticket Management Routes
     Route::get('/complete', 'Ticket\Ticketit\Controllers\TicketsController@indexComplete')
         ->name("$main_route-complete");
-    
     Route::get('/data/{id?}', 'Ticket\Ticketit\Controllers\TicketsController@data')
         ->name("$main_route.data");
 
     // Basic Ticket Routes for Staff
     Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@index')
         ->name("$main_route.index");
-    
     Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
         ->name("$main_route.create");
-    
     Route::post('/', 'Ticket\Ticketit\Controllers\TicketsController@store')
         ->name("$main_route.store");
-    
     Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@show')
         ->name("$main_route.show");
-    
     Route::put('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@update')
         ->name("$main_route.update");
-    
     Route::delete('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@destroy')
         ->name("$main_route.destroy");
 
     // Ticket Status Management
     Route::get('/{ticket}/complete', 'Ticket\Ticketit\Controllers\TicketsController@complete')
         ->name("$main_route.complete");
-    
     Route::get('/{ticket}/reopen', 'Ticket\Ticketit\Controllers\TicketsController@reopen')
         ->name("$main_route.reopen");
 

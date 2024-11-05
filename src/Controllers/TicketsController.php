@@ -75,6 +75,124 @@ class TicketsController extends Controller
         return Auth::user();
     }
 
+
+
+    
+    public function staffIndex()
+{
+    try {
+        if (!Auth::guard('web')->check()) {
+            return redirect()->route('login')
+                ->with('error', 'You must be logged in to access this page.');
+        }
+
+        $tickets = app('db')->connection()
+            ->table('ticketit')
+            ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+            ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+            ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+            ->join('customers', 'ticketit.customer_id', '=', 'customers.id')
+            ->select([
+                'ticketit.*',
+                'ticketit_statuses.name as status_name',
+                'ticketit_statuses.color as status_color',
+                'ticketit_priorities.name as priority_name',
+                'ticketit_priorities.color as priority_color',
+                'ticketit_categories.name as category_name',
+                'ticketit_categories.color as category_color',
+                'customers.name as customer_name'
+            ])
+            ->orderBy('ticketit.created_at', 'desc')
+            ->paginate(10);
+
+        return view('ticketit::bootstrap3.tickets.staff.index', compact('tickets'));
+
+    } catch (\Exception $e) {
+        Log::error('Error loading staff tickets: ' . $e->getMessage());
+        return redirect()->back()
+            ->with('error', 'Error loading tickets. Please try again.');
+    }
+}
+
+    public function updateStatus($id, $status)
+    {
+        try {
+            if (!Auth::guard('web')->check()) {
+                return redirect()->route('login')
+                    ->with('error', 'You must be logged in to perform this action.');
+            }
+
+            $statusMap = [
+                'open' => 'Open',
+                'in-progress' => 'In Progress',
+                'closed' => 'Closed'
+            ];
+
+            if (!isset($statusMap[$status])) {
+                throw new \Exception('Invalid status provided');
+            }
+
+            $statusRecord = Status::where('name', $statusMap[$status])->first();
+            if (!$statusRecord) {
+                throw new \Exception('Status not found in database');
+            }
+
+            $ticket = Ticket::findOrFail($id);
+            $ticket->status_id = $statusRecord->id;
+            $ticket->save();
+
+            return redirect()->back()
+                ->with('success', 'Ticket status updated successfully.');
+
+        } catch (\Exception $e) {
+            Log::error('Error updating ticket status: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Error updating ticket status. Please try again.');
+        }
+    }
+
+    public function staffShow($id)
+    {
+        try {
+            if (!Auth::guard('web')->check()) {
+                return redirect()->route('login')
+                    ->with('error', 'You must be logged in to view tickets.');
+            }
+
+            $ticket = app('db')->connection()
+                ->table('ticketit')
+                ->where('ticketit.id', $id)
+                ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+                ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+                ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+                ->join('customers', 'ticketit.customer_id', '=', 'customers.id')
+                ->select([
+                    'ticketit.*',
+                    'ticketit_statuses.name as status_name',
+                    'ticketit_statuses.color as status_color',
+                    'ticketit_priorities.name as priority_name',
+                    'ticketit_priorities.color as priority_color',
+                    'ticketit_categories.name as category_name',
+                    'ticketit_categories.color as category_color',
+                    'customers.name as customer_name',
+                    'customers.email as customer_email'
+                ])
+                ->first();
+
+            if (!$ticket) {
+                return redirect()->route('tickets.index')
+                    ->with('error', 'Ticket not found.');
+            }
+
+            return view('ticketit::bootstrap3.tickets.staff.show', compact('ticket'));
+
+        } catch (\Exception $e) {
+            Log::error('Error showing ticket to staff: ' . $e->getMessage());
+            return redirect()->route('tickets.index')
+                ->with('error', 'Error loading ticket. Please try again.');
+        }
+    }
+
     public function data($complete = false)
     {
         if (LaravelVersion::min('5.4')) {
