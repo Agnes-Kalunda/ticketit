@@ -74,7 +74,7 @@ class TicketitServiceProvider extends ServiceProvider
         try {
             // Initialize publish groups
             $this->setupPublishGroups();
-            
+
             // Load core components
             $this->loadCoreComponents();
 
@@ -163,7 +163,7 @@ class TicketitServiceProvider extends ServiceProvider
         $loader->alias('Form', \Collective\Html\FormFacade::class);
     }
 
-    
+
 
     protected function registerFormMacros()
     {
@@ -176,7 +176,7 @@ class TicketitServiceProvider extends ServiceProvider
     {
         try {
             $router = $this->app['router'];
-            
+
             // Debug middleware
             $router->aliasMiddleware('ticketit.debug', function(Request $request, \Closure $next) {
                 Log::info('Ticketit Request:', [
@@ -196,13 +196,13 @@ class TicketitServiceProvider extends ServiceProvider
             // Register core middleware
             $router->aliasMiddleware('ticketit.customer', 
                 \Ticket\Ticketit\Middleware\CustomerAuthMiddleware::class);
-            
+
             $router->aliasMiddleware('ticketit.staff', 
                 \Ticket\Ticketit\Middleware\StaffAuthMiddleware::class);
-            
+
             $router->aliasMiddleware('ticketit.admin', 
                 \Ticket\Ticketit\Middleware\AdminAuthMiddleware::class);
-            
+
             $router->aliasMiddleware('ticketit.agent', 
                 \Ticket\Ticketit\Middleware\AgentAuthMiddleware::class);
 
@@ -289,7 +289,7 @@ class TicketitServiceProvider extends ServiceProvider
     {
         try {
             $original_ticket = Ticket::find($modified_ticket->id);
-            
+
             if (Setting::grab('status_notification')) {
                 if ($original_ticket->status_id != $modified_ticket->status_id || 
                     $original_ticket->completed_at != $modified_ticket->completed_at) {
@@ -297,7 +297,7 @@ class TicketitServiceProvider extends ServiceProvider
                     $notification->ticketStatusUpdated($modified_ticket, $original_ticket);
                 }
             }
-            
+
             if (Setting::grab('assigned_notification')) {
                 if ($original_ticket->agent_id != $modified_ticket->agent_id) {
                     $notification = new NotificationsController();
@@ -377,7 +377,7 @@ class TicketitServiceProvider extends ServiceProvider
                     ];
 
                     Log::info('View composer debug info:', $debug);
-                    
+
                     $view->with('debug', $debug);
                     $view->with('setting', $settings);
 
@@ -398,7 +398,6 @@ class TicketitServiceProvider extends ServiceProvider
             'views_directory' => $viewsDirectory,
             'views_exists' => file_exists($viewsDirectory)
         ]);
-
         // Define all publish paths
         $publishPaths = [
             __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
@@ -408,7 +407,6 @@ class TicketitServiceProvider extends ServiceProvider
             __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
             __DIR__.'/Public' => public_path('vendor/ticketit'),
         ];
-
         
         foreach ($publishPaths as $source => $destination) {
             Log::info('Checking source path', [
@@ -419,7 +417,6 @@ class TicketitServiceProvider extends ServiceProvider
 
         // Publish assets
         $this->publishes($publishPaths, 'ticketit-assets');
-
         // Create destination directories if they don't exist
         foreach ($publishPaths as $source => $destination) {
             $directory = dirname($destination);
@@ -441,30 +438,24 @@ class TicketitServiceProvider extends ServiceProvider
                 'to' => $destination
             ]);
         }
-
     } catch (\Exception $e) {
         Log::error('Error publishing assets: ' . $e->getMessage(), [
             'trace' => $e->getTraceAsString()
         ]);
     }
 }
-
-
     protected function copyDirectory($source, $destination)
     {
         if (!is_dir($destination)) {
             mkdir($destination, 0755, true);
         }
-
         $dir = opendir($source);
         while (($file = readdir($dir)) !== false) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
-
             $sourcePath = $source . '/' . $file;
             $destinationPath = $destination . '/' . $file;
-
             if (is_dir($sourcePath)) {
                 $this->copyDirectory($sourcePath, $destinationPath);
             } else {
@@ -472,7 +463,6 @@ class TicketitServiceProvider extends ServiceProvider
             }
         }
         closedir($dir);
-
     }
 
     protected function registerValidationRules()
@@ -534,7 +524,7 @@ class TicketitServiceProvider extends ServiceProvider
             });
 
             Log::info('Installation routes registered successfully');
-            
+
         } catch (\Exception $e) {
             Log::error('Error setting up installation routes: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
