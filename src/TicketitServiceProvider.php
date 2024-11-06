@@ -25,7 +25,7 @@ use Ticket\Ticketit\Models\Status;
 use Ticket\Ticketit\ViewComposers\TicketItComposer;
 use Ticket\Ticketit\Console\Commands\TicketDebugCommand;
 use Ticket\Ticketit\Console\Commands\SeedTicketit;
-
+use Illuminate\Support\Facades\File;
 class TicketitServiceProvider extends ServiceProvider
 {
     /**
@@ -100,59 +100,116 @@ class TicketitServiceProvider extends ServiceProvider
     }
 
     protected function setupPublishGroups()
-    {
-        $viewsDirectory = __DIR__.'/Views/bootstrap3';
+{
+    $viewsDirectory = __DIR__.'/Views/bootstrap3';
 
-        $this->ticketitPublishGroups = [
-            'ticketit-config' => [
-                __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
-            ],
-            'ticketit-migrations' => [
-                __DIR__.'/Migrations' => database_path('migrations'),
-            ],
-            'ticketit-views' => [
-                $viewsDirectory => resource_path('views/vendor/ticketit'),
-            ],
-            'ticketit-lang' => [
-                __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
-            ],
-            'ticketit-public' => [
-                __DIR__.'/Public' => public_path('vendor/ticketit'),
-            ],
-        ];
+    $this->ticketitPublishGroups = [
+        'ticketit-config' => [
+            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
+        ],
+        'ticketit-migrations' => [
+            __DIR__.'/Migrations' => database_path('migrations'),
+        ],
+        'ticketit-views' => [
+            $viewsDirectory => resource_path('views/vendor/ticketit'),
+        ],
+        'ticketit-lang' => [
+            __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
+        ],
+        'ticketit-public' => [
+            __DIR__.'/Public' => public_path('vendor/ticketit'),
+        ],
+        'ticketit-routes' => [
+            __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
+        ],
+    ];
 
-        Log::info('Publishing groups set up', [
-            'groups' => array_keys($this->ticketitPublishGroups)
-        ]);
+    Log::info('Publishing groups set up', [
+        'groups' => array_keys($this->ticketitPublishGroups)
+    ]);
 
-        // Publish each group individually
-        foreach ($this->ticketitPublishGroups as $tag => $paths) {
-            $this->publishes($paths, $tag);
-        }
-
-        // Publish all assets together
-        $allPaths = [];
-        foreach ($this->ticketitPublishGroups as $paths) {
-            $allPaths = array_merge($allPaths, $paths);
-        }
-        $this->publishes($allPaths, 'ticketit-assets');
+    // Publish each group individually
+    foreach ($this->ticketitPublishGroups as $tag => $paths) {
+        $this->publishes($paths, $tag);
     }
+
+    // Publish all assets together
+    $allPaths = [];
+    foreach ($this->ticketitPublishGroups as $paths) {
+        $allPaths = array_merge($allPaths, $paths);
+    }
+    $this->publishes($allPaths, 'ticketit-assets');
+}
+
 
     protected function loadCoreComponents()
     {
-        $viewsDirectory = __DIR__.'/Views/bootstrap3';
+        try {
+            $viewsDirectory = __DIR__.'/Views/bootstrap3';
 
-        Log::info('Loading core components', [
-            'views_path' => $viewsDirectory,
-            'translations_path' => __DIR__.'/Translations',
-            'migrations_path' => __DIR__.'/Migrations'
-        ]);
+            Log::info('Loading views from directory', [
+                'path' => $viewsDirectory,
+                'exists' => file_exists($viewsDirectory),
+                'contents' => array_diff(scandir($viewsDirectory), ['.', '..']),
+                'full_path' => realpath($viewsDirectory)
+            ]);
 
-        $this->loadViewsFrom($viewsDirectory, 'ticketit');
-        $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
-        $this->loadMigrationsFrom(__DIR__.'/Migrations');
+            // Register primary namespace
+            $this->loadViewsFrom($viewsDirectory, 'ticketit');
+
+            // Register published views
+            $publishedPath = resource_path('views/vendor/ticketit');
+            if (file_exists($publishedPath)) {
+                $this->loadViewsFrom($publishedPath, 'ticketit');
+                Log::info('Loading published views from', ['path' => $publishedPath]);
+            }
+
+            // Log all available views
+            Log::info('Available views:', [
+                'views' => collect(File::allFiles($viewsDirectory))
+                    ->map(function($file) {
+                        return $file->getRelativePathname();
+                    })
+                    ->toArray()
+            ]);
+
+            // debug info for view hints
+            Log::info('View hints:', [
+                'hints' => View::getFinder()->getHints()
+            ]);
+
+            $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
+            $this->loadMigrationsFrom(__DIR__.'/Migrations');
+
+        } catch (\Exception $e) {
+            Log::error('Error loading core components: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
     }
-
+    protected function getViewContents($view)
+    {
+        try {
+            $viewPath = View::getFinder()->find("ticketit::$view");
+            Log::info("View path for $view:", ['path' => $viewPath]);
+            
+            if (file_exists($viewPath)) {
+                $contents = file_get_contents($viewPath);
+                Log::info("View contents for $view:", [
+                    'length' => strlen($contents),
+                    'preview' => substr($contents, 0, 100)
+                ]);
+                return $contents;
+            }
+            
+            Log::warning("View file not found: $viewPath");
+            return null;
+            
+        } catch (\Exception $e) {
+            Log::error("Error getting view contents for $view: " . $e->getMessage());
+            return null;
+        }
+    }
     protected function registerDependencies()
     {
         $this->app->register(\Collective\Html\HtmlServiceProvider::class);
