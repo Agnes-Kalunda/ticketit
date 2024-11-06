@@ -23,12 +23,13 @@ use Ticket\Ticketit\Models\Category;
 use Ticket\Ticketit\Models\Priority;
 use Ticket\Ticketit\Models\Status;
 use Ticket\Ticketit\ViewComposers\TicketItComposer;
-
+use Ticket\Ticketit\Console\Commands\TicketDebugCommand;
+use Ticket\Ticketit\Console\Commands\SeedTicketit;
 class TicketitServiceProvider extends ServiceProvider
 {
     protected $commands = [
-        'Ticket\Ticketit\Console\Commands\SeedTicketit',
-        'Ticket\Ticketit\Console\Commands\TicketDebugCommand'
+        SeedTicketit::class,
+        TicketDebugCommand::class  
     ];
 
     /**
@@ -45,7 +46,12 @@ class TicketitServiceProvider extends ServiceProvider
         $this->registerDependencies();
 
         // Register Commands
-        $this->commands($this->commands);
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                SeedTicketit::class,
+                TicketDebugCommand::class
+            ]);
+        }
 
         // Register Form Macros
         $this->registerFormMacros();
