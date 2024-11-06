@@ -2,7 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Request;
 use Ticket\Ticketit\Models\Setting;
+use Ticket\Ticketit\Helpers\LaravelVersion;
 
 // Load settings with proper caching
 $settings = [
@@ -47,7 +49,7 @@ Route::group([
 
 // Staff/Admin Extended Routes
 Route::group([
-    'middleware' => [\Ticket\Ticketit\Helpers\LaravelVersion::authMiddleware()],
+    'middleware' => ['web', 'auth'],
     'prefix' => $main_route_path
 ], function () use ($main_route, $main_route_path, $admin_route, $admin_route_path) {
     
@@ -87,49 +89,81 @@ Route::group([
     ])->only(['store', 'update', 'destroy']);
 
     // Agent Routes
-    Route::group(['middleware' => 'Ticket\Ticketit\Middleware\IsAgentMiddleware'], function () use ($main_route, $main_route_path) {
+    Route::group(['middleware' => 'Ticket\Ticketit\Middleware\IsAgentMiddleware'], function () use ($main_route) {
         Route::get("/agents/list/{category_id?}/{ticket_id?}", [
             'as' => $main_route.'agentselectlist',
             'uses' => 'Ticket\Ticketit\Controllers\TicketsController@agentSelectList',
         ]);
     });
-
-    // Admin Routes
-    Route::group(['middleware' => 'Ticket\Ticketit\Middleware\IsAdminMiddleware', 'prefix' => $admin_route_path], 
-    function () use ($admin_route) {
-        // Dashboard
-        Route::get('/', 'Ticket\Ticketit\Controllers\DashboardController@index');
-        Route::get('/indicator/{indicator_period?}', 'Ticket\Ticketit\Controllers\DashboardController@index')
-            ->name("$admin_route.dashboard.indicator");
-
-        // Status Management
-        Route::resource('status', 'Ticket\Ticketit\Controllers\StatusesController', [
-            'as' => $admin_route
-        ]);
-
-        // Priority Management
-        Route::resource('priority', 'Ticket\Ticketit\Controllers\PrioritiesController', [
-            'as' => $admin_route
-        ]);
-
-        // Category Management
-        Route::resource('category', 'Ticket\Ticketit\Controllers\CategoriesController', [
-            'as' => $admin_route
-        ]);
-
-        // Agent Management
-        Route::resource('agent', 'Ticket\Ticketit\Controllers\AgentsController', [
-            'as' => $admin_route
-        ]);
-
-        // Configuration Management
-        Route::resource('configuration', 'Ticket\Ticketit\Controllers\ConfigurationsController', [
-            'as' => $admin_route
-        ]);
-
-        // Administrator Management
-        Route::resource('administrator', 'Ticket\Ticketit\Controllers\AdministratorsController', [
-            'as' => $admin_route
-        ]);
-    });
 });
+
+// Admin Routes
+Route::group([
+    'middleware' => ['web', 'auth', 'Ticket\Ticketit\Middleware\IsAdminMiddleware'],
+    'prefix' => $admin_route_path,
+    'as' => "$admin_route."
+], function () {
+    // Dashboard
+    Route::get('/', 'Ticket\Ticketit\Controllers\DashboardController@index')
+        ->name('dashboard');
+    Route::get('/indicator/{indicator_period?}', 'Ticket\Ticketit\Controllers\DashboardController@index')
+        ->name('dashboard.indicator');
+
+    // User Management Routes
+    Route::get('/users', 'Ticket\Ticketit\Controllers\UsersController@index')
+        ->name('users.index');
+    Route::get('/users/create', 'Ticket\Ticketit\Controllers\UsersController@create')
+        ->name('users.create');
+    Route::post('/users', 'Ticket\Ticketit\Controllers\UsersController@store')
+        ->name('users.store');
+    Route::get('/users/{user}/edit', 'Ticket\Ticketit\Controllers\UsersController@edit')
+        ->name('users.edit');
+    Route::put('/users/{user}', 'Ticket\Ticketit\Controllers\UsersController@update')
+        ->name('users.update');
+    Route::delete('/users/{user}', 'Ticket\Ticketit\Controllers\UsersController@destroy')
+        ->name('users.destroy');
+
+    // Status Management
+    Route::resource('status', 'Ticket\Ticketit\Controllers\StatusesController');
+
+    // Priority Management
+    Route::resource('priority', 'Ticket\Ticketit\Controllers\PrioritiesController');
+
+    // Category Management
+    Route::resource('category', 'Ticket\Ticketit\Controllers\CategoriesController');
+
+    // Agent Management
+    Route::resource('agent', 'Ticket\Ticketit\Controllers\AgentsController');
+
+    // Configuration Management
+    Route::resource('configuration', 'Ticket\Ticketit\Controllers\ConfigurationsController');
+
+    // Administrator Management
+    Route::resource('administrator', 'Ticket\Ticketit\Controllers\AdministratorsController');
+});
+
+// Installation Routes
+if (app('request')->is('tickets-install') || 
+    app('request')->is('tickets-upgrade') || 
+    app('request')->is('tickets') || 
+    app('request')->is('tickets-admin') || 
+    (isset($_SERVER['ARTISAN_TICKETIT_INSTALLING']) && $_SERVER['ARTISAN_TICKETIT_INSTALLING'])) {
+    
+    Route::get('/tickets-install', [
+        'middleware' => LaravelVersion::authMiddleware(),
+        'as' => 'tickets.install.index',
+        'uses' => 'Ticket\Ticketit\Controllers\InstallController@index',
+    ]);
+
+    Route::post('/tickets-install', [
+        'middleware' => LaravelVersion::authMiddleware(),
+        'as' => 'tickets.install.setup',
+        'uses' => 'Ticket\Ticketit\Controllers\InstallController@setup',
+    ]);
+
+    Route::get('/tickets-upgrade', [
+        'middleware' => LaravelVersion::authMiddleware(),
+        'as' => 'tickets.install.upgrade',
+        'uses' => 'Ticket\Ticketit\Controllers\InstallController@upgrade',
+    ]);
+}

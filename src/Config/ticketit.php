@@ -143,7 +143,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'views' => [
-        'theme' => 'bootstrap3', // or 'bootstrap4'
+        'theme' => 'bootstrap3', 
         'custom_templates' => false,
         'template_directory' => 'ticketit',
     ],
