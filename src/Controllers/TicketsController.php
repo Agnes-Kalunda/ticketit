@@ -406,129 +406,108 @@ public function updateStatus(Request $request, $id)
     }
 
     public function create()
-{
-    try {
+    {
         if (!$this->isCustomer()) {
-            Log::warning('Non-customer attempted to access ticket creation');
-            return redirect()->route('home')
-                ->with('error', 'Only customers can create tickets');
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', 'Staff members cannot create tickets');
         }
 
-        // Define static categories and priorities with their colors
-        $categories = [
-            'Technical' => ['name' => 'Technical Support', 'color' => '#0014f4'],
-            'Billing' => ['name' => 'Billing', 'color' => '#2b9900'],
-            'Customer Service' => ['name' => 'Customer Service', 'color' => '#7e0099']
-        ];
+        try {
+            $this->ensureDefaultDataExists();
 
-        $priorities = [
-            'Low' => ['name' => 'Low Priority', 'color' => '#069900'],
-            'Medium' => ['name' => 'Medium Priority', 'color' => '#e1d200'],
-            'High' => ['name' => 'High Priority', 'color' => '#e10000']
-        ];
+            $categories = Category::orderBy('name')->pluck('name', 'id');
+            $priorities = Priority::orderBy('name')->pluck('name', 'id');
 
-        Log::info('Create form data loaded', [
-            'categories' => $categories,
-            'priorities' => $priorities,
-            'customer_id' => $this->getAuthUser()->id ?? 'no user',
-            'is_customer' => $this->isCustomer()
-        ]);
+            Log::info('Form data retrieved:', [
+                'categories_count' => count($categories),
+                'priorities_count' => count($priorities)
+            ]);
 
-        return view('ticketit::bootstrap3.tickets.create_customer', [
-            'categories' => $categories,
-            'priorities' => $priorities
-        ]);
+            return view('ticketit::tickets.create_customer', [
+                'categories' => $categories,
+                'priorities' => $priorities,
+                'master' => 'layouts.app'
+            ]);
 
-    } catch (\Exception $e) {
-        Log::error('Error in create method: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
-        ]);
-        
-        return redirect()->back()
-            ->with('error', 'Error loading form. Please try again.');
+        } catch (\Exception $e) {
+            Log::error('Error in create form: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Error loading form: ' . $e->getMessage());
+        }
     }
-}
+
     public function store(Request $request)
 {
-    Log::info('Store method called:', ['request_data' => $request->all()]);
-    Log::info('Received ticket creation request:', [
-        'all_data' => $request->all(),
-        'customer' => Auth::guard('customer')->user()->id ?? 'not authenticated'
-    ]);
     try {
         if (!$this->isCustomer()) {
-            Log::warning('Non-customer attempted to create ticket');
-            return redirect()->route('customer.tickets.index')
-                ->with('warning', 'Only customers can create tickets');
+            return redirect()->route(Setting::grab('main_route').'.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
         }
 
-        $customer = Auth::guard('customer')->user();
-        if (!$customer) {
-            Log::error('No authenticated customer found');
-            return redirect()->route('customer.login')
-                ->with('error', 'Please login to create a ticket');
-        }
-
-        // Validate request
         $validator = Validator::make($request->all(), [
             'subject' => 'required|min:3',
             'content' => 'required|min:6',
-            'category_name' => 'required|exists:ticketit_categories,id',
-            'priority_name' => 'required|exists:ticketit_priorities,id',
+            'category_name' => 'required|in:Technical,Billing,Customer Service',
+            'priority_name' => 'required|in:Low,Medium,High',
         ]);
 
         if ($validator->fails()) {
-            Log::error('Validation failed:', [
-                'errors' => $validator->errors()->toArray(),
-                'input' => $request->all()
-            ]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
         }
 
-        // Get default open status
-        $status = \Ticket\Ticketit\Models\Status::where('name', 'Open')->first();
-        if (!$status) {
-            Log::error('Default status not found');
-            throw new \Exception('Could not find default ticket status');
+        $connection = app('db')->connection();
+        $connection->beginTransaction();
+
+        try {
+            // Get category
+            $category = Category::firstOrCreate(
+                ['name' => $request->category_name],
+                ['color' => $this->getCategoryColor($request->category_name)]
+            );
+
+            // Get priority
+            $priority = Priority::firstOrCreate(
+                ['name' => $request->priority_name],
+                ['color' => $this->getPriorityColor($request->priority_name)]
+            );
+
+            // Get default open status
+            $status = Status::firstOrCreate(
+                ['name' => 'Open'],
+                ['color' => '#f39c12']
+            );
+
+            $ticket = new Ticket();
+            $ticket->subject = $request->subject;
+            $ticket->content = $request->content;
+            $ticket->priority_id = $priority->id;
+            $ticket->category_id = $category->id;
+            $ticket->status_id = $status->id;
+            $ticket->customer_id = $this->getAuthUser()->id;
+
+            if (!$ticket->save()) {
+                throw new \Exception('Failed to save ticket');
+            }
+
+            $connection->commit();
+
+            return redirect()->route('customer.tickets.index')
+                ->with('success', 'Ticket has been created successfully!');
+
+        } catch (\Exception $e) {
+            $connection->rollBack();
+            throw $e;
         }
-
-        // Create ticket
-        $ticket = new \Ticket\Ticketit\Models\Ticket();
-        $ticket->subject = $request->subject;
-        $ticket->content = $request->content;
-        $ticket->status_id = $status->id;
-        $ticket->priority_id = $request->priority_id;
-        $ticket->category_id = $request->category_id;
-        $ticket->customer_id = $customer->id;
-        $ticket->agent_id = null; 
-
-        if (!$ticket->save()) {
-            Log::error('Failed to save ticket');
-            throw new \Exception('Failed to create ticket');
-        }
-
-        Log::info('Ticket created successfully', [
-            'ticket_id' => $ticket->id,
-            'customer_id' => $customer->id
-        ]);
-
-        return redirect()->route('customer.tickets.index')
-            ->with('success', 'Ticket has been created successfully!');
-
     } catch (\Exception $e) {
-        Log::error('Error creating ticket:', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'request_data' => $request->all()
-        ]);
-
+        Log::error('Ticket creation failed: ' . $e->getMessage());
         return redirect()->back()
-            ->with('error', 'Failed to create ticket. Please try again.')
+            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
             ->withInput();
     }
-}
+
+}  
     protected function getCategoryColor($name)
     {
         $colors = [
