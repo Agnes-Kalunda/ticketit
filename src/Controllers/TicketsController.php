@@ -410,42 +410,59 @@ public function updateStatus(Request $request, $id)
 
     public function create()
 {
-    if (!$this->isCustomer()) {
-        return redirect()->route(Setting::grab('main_route').'.index')
-            ->with('warning', 'Staff members cannot create tickets');
-    }
-
     try {
+        Log::info('Starting ticket creation form', [
+            'user' => auth()->guard('customer')->user()->only(['id', 'name', 'email'])
+        ]);
+
+        if (!$this->isCustomer()) {
+            Log::warning('Non-customer attempted to access ticket creation');
+            return redirect()->route('login')
+                ->with('error', 'You must be logged in as a customer to create tickets.');
+        }
+
         $this->ensureDefaultDataExists();
 
         $categories = Category::orderBy('name')->pluck('name', 'id');
         $priorities = Priority::orderBy('name')->pluck('name', 'id');
 
-        // Debug view resolution
-        Log::info('Resolving create_customer view', [
+        Log::info('Rendering ticket creation form', [
+            'view_exists' => [
+                'ticketit::tickets.create_customer' => 
+                    View::exists('ticketit::tickets.create_customer'),
+                'vendor.ticketit.tickets.create_customer' => 
+                    View::exists('vendor.ticketit.tickets.create_customer'),
+            ],
             'view_paths' => View::getFinder()->getPaths(),
-            'view_hints' => View::getFinder()->getHints(),
-            'attempting_view' => 'ticketit::tickets.create_customer'
+            'view_hints' => View::getFinder()->getHints()
         ]);
 
-        // multiple view resolution paths
-        $view = 'ticketit::tickets.create_customer';
-        if (!View::exists($view)) {
-            $view = 'vendor.ticketit.tickets.create_customer';
-        }
-
-        return view($view, [
+        return view('ticketit::tickets.create_customer', [
             'categories' => $categories,
             'priorities' => $priorities,
-            'master' => 'layouts.app'
+            'master' => 'layouts.app',
+            'debug' => [
+                'view_paths' => View::getFinder()->getPaths(),
+                'view_hints' => View::getFinder()->getHints(),
+                'auth' => [
+                    'guard' => 'customer',
+                    'check' => auth()->guard('customer')->check(),
+                    'user' => auth()->guard('customer')->check() ? 
+                        auth()->guard('customer')->user()->only(['id', 'name', 'email']) : null
+                ]
+            ]
         ]);
 
     } catch (\Exception $e) {
-        Log::error('Error in create form: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
+        Log::error('Error in ticket creation form', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'view_paths' => View::getFinder()->getPaths(),
+            'view_hints' => View::getFinder()->getHints()
         ]);
+
         return redirect()->back()
-            ->with('error', 'Error loading form: ' . $e->getMessage());
+            ->with('error', 'Error loading ticket form. Please try again.');
     }
 }
     public function store(Request $request)
