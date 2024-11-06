@@ -7,7 +7,9 @@
         'customer' => auth()->guard('customer')->check() ? [
             'id' => auth()->guard('customer')->id(),
             'name' => auth()->guard('customer')->user()->name
-        ] : 'not authenticated'
+        ] : 'not authenticated',
+        'categories' => $categories ?? [],
+        'priorities' => $priorities ?? []
     ]);
 @endphp
 
@@ -16,7 +18,7 @@
         <div class="col-md-8">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ trans('ticketit::lang.create-new-ticket') }}</h5>
+                    <h5 class="mb-0">Create New Support Ticket</h5>
                     <a href="{{ route('customer.tickets.index') }}" class="btn btn-secondary btn-sm">Back to Tickets</a>
                 </div>
 
@@ -39,10 +41,10 @@
 
                     <form method="POST" action="{{ route('customer.tickets.store') }}" id="ticketForm">
                         @csrf
-                        
+
                         <div class="form-group row mb-3">
-                            <label for="subject" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.subject') }}{{ trans('ticketit::lang.colon') }}
+                            <label for="subject" class="col-md-3 col-form-label text-md-right required">
+                                Subject
                             </label>
                             <div class="col-md-8">
                                 <input type="text" 
@@ -60,8 +62,8 @@
                         </div>
 
                         <div class="form-group row mb-3">
-                            <label for="category_name" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.category') }}{{ trans('ticketit::lang.colon') }}
+                            <label for="category_name" class="col-md-3 col-form-label text-md-right required">
+                                Category
                             </label>
                             <div class="col-md-8">
                                 <select name="category_name" 
@@ -69,21 +71,13 @@
                                         class="form-control @error('category_name') is-invalid @enderror" 
                                         required>
                                     <option value="">Select Category</option>
-                                    <option value="Technical" 
-                                            style="color: #0014f4" 
-                                            {{ old('category_name') == 'Technical' ? 'selected' : '' }}>
-                                        Technical Support
-                                    </option>
-                                    <option value="Billing" 
-                                            style="color: #2b9900" 
-                                            {{ old('category_name') == 'Billing' ? 'selected' : '' }}>
-                                        Billing
-                                    </option>
-                                    <option value="Customer Service" 
-                                            style="color: #7e0099" 
-                                            {{ old('category_name') == 'Customer Service' ? 'selected' : '' }}>
-                                        Customer Service
-                                    </option>
+                                    @foreach($categories as $key => $category)
+                                        <option value="{{ $key }}" 
+                                                style="color: {{ $category['color'] }}"
+                                                {{ old('category_name') == $key ? 'selected' : '' }}>
+                                            {{ $category['name'] }}
+                                        </option>
+                                    @endforeach
                                 </select>
                                 @error('category_name')
                                     <span class="invalid-feedback" role="alert">
@@ -94,8 +88,8 @@
                         </div>
 
                         <div class="form-group row mb-3">
-                            <label for="priority_name" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.priority') }}{{ trans('ticketit::lang.colon') }}
+                            <label for="priority_name" class="col-md-3 col-form-label text-md-right required">
+                                Priority
                             </label>
                             <div class="col-md-8">
                                 <select name="priority_name" 
@@ -103,21 +97,13 @@
                                         class="form-control @error('priority_name') is-invalid @enderror" 
                                         required>
                                     <option value="">Select Priority</option>
-                                    <option value="Low" 
-                                            style="color: #069900" 
-                                            {{ old('priority_name') == 'Low' ? 'selected' : '' }}>
-                                        Low
-                                    </option>
-                                    <option value="Medium" 
-                                            style="color: #e1d200" 
-                                            {{ old('priority_name') == 'Medium' ? 'selected' : '' }}>
-                                        Medium
-                                    </option>
-                                    <option value="High" 
-                                            style="color: #e10000" 
-                                            {{ old('priority_name') == 'High' ? 'selected' : '' }}>
-                                        High
-                                    </option>
+                                    @foreach($priorities as $key => $priority)
+                                        <option value="{{ $key }}" 
+                                                style="color: {{ $priority['color'] }}"
+                                                {{ old('priority_name') == $key ? 'selected' : '' }}>
+                                            {{ $priority['name'] }}
+                                        </option>
+                                    @endforeach
                                 </select>
                                 @error('priority_name')
                                     <span class="invalid-feedback" role="alert">
@@ -128,8 +114,8 @@
                         </div>
 
                         <div class="form-group row mb-3">
-                            <label for="content" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.message') }}{{ trans('ticketit::lang.colon') }}
+                            <label for="content" class="col-md-3 col-form-label text-md-right required">
+                                Message
                             </label>
                             <div class="col-md-8">
                                 <textarea class="form-control @error('content') is-invalid @enderror" 
@@ -148,10 +134,10 @@
                         <div class="form-group row mb-0">
                             <div class="col-md-8 offset-md-3">
                                 <button type="submit" class="btn btn-primary" id="submitBtn">
-                                    {{ trans('ticketit::lang.btn-submit') }}
+                                    Submit Ticket
                                 </button>
                                 <a href="{{ route('customer.dashboard') }}" class="btn btn-link">
-                                    {{ trans('ticketit::lang.btn-cancel') }}
+                                    Cancel
                                 </a>
                             </div>
                         </div>
@@ -164,18 +150,19 @@
 
 @push('scripts')
 <script>
-document.getElementById('ticketForm').addEventListener('submit', function(e) {
-    // Log form data before submission
-    const formData = new FormData(this);
-    const formDataObj = {};
-    formData.forEach((value, key) => formDataObj[key] = value);
-    
-    console.log('Submitting form with data:', formDataObj);
-    
-    // Disable submit button to prevent double submission
-    var submitBtn = document.getElementById('submitBtn');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = 'Submitting...';
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('ticketForm');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', function(e) {
+        // Log form data
+        const formData = new FormData(this);
+        console.log('Form data:', Object.fromEntries(formData));
+
+        // Disable submit button
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+    });
 });
 </script>
 @endpush
@@ -193,15 +180,16 @@ document.getElementById('ticketForm').addEventListener('submit', function(e) {
 .invalid-feedback {
     display: block;
 }
-.btn-submit:disabled {
-    cursor: not-allowed;
-    opacity: 0.65;
-}
-.form-group {
-    margin-bottom: 1rem;
+.required:after {
+    content: ' *';
+    color: red;
 }
 select.form-control option {
     padding: 0.5rem;
+}
+.btn-submit:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
 }
 </style>
 @endsection

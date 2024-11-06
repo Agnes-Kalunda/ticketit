@@ -407,60 +407,47 @@ public function updateStatus(Request $request, $id)
 
     public function create()
 {
-    // Authentication check logging
-    Log::info('Create ticket attempt:', [
-        'is_customer' => $this->isCustomer(),
-        'auth_user' => $this->getAuthUser() ? [
-            'id' => $this->getAuthUser()->id,
-            'type' => 'customer'
-        ] : 'no user'
-    ]);
-
-    if (!$this->isCustomer()) {
-        Log::warning('Non-customer attempted to access ticket creation');
-        return redirect()->route(Setting::grab('main_route').'.index')
-            ->with('warning', 'Staff members cannot create tickets');
-    }
-
     try {
-        $this->ensureDefaultDataExists();
+        if (!$this->isCustomer()) {
+            Log::warning('Non-customer attempted to access ticket creation');
+            return redirect()->route('home')
+                ->with('error', 'Only customers can create tickets');
+        }
 
-        $categories = Category::orderBy('name')->pluck('name', 'id');
-        $priorities = Priority::orderBy('name')->pluck('name', 'id');
+        // Define static categories and priorities with their colors
+        $categories = [
+            'Technical' => ['name' => 'Technical Support', 'color' => '#0014f4'],
+            'Billing' => ['name' => 'Billing', 'color' => '#2b9900'],
+            'Customer Service' => ['name' => 'Customer Service', 'color' => '#7e0099']
+        ];
 
-        Log::info('Form data retrieved:', [
-            'categories_count' => count($categories),
-            'priorities_count' => count($priorities),
-            'categories' => $categories->toArray(),
-            'priorities' => $priorities->toArray(),
-            'customer_id' => $this->getAuthUser()->id
-        ]);
+        $priorities = [
+            'Low' => ['name' => 'Low Priority', 'color' => '#069900'],
+            'Medium' => ['name' => 'Medium Priority', 'color' => '#e1d200'],
+            'High' => ['name' => 'High Priority', 'color' => '#e10000']
+        ];
 
-        // Debug view path
-        Log::info('Rendering view:', [
-            'view_path' => 'ticketit::tickets.create_customer',
-            'master_layout' => 'layouts.app'
-        ]);
-
-        return view('ticketit::tickets.create_customer', [
+        Log::info('Create form data loaded', [
             'categories' => $categories,
             'priorities' => $priorities,
-            'master' => 'layouts.app'
+            'customer_id' => $this->getAuthUser()->id ?? 'no user',
+            'is_customer' => $this->isCustomer()
+        ]);
+
+        return view('ticketit::bootstrap3.tickets.create_customer', [
+            'categories' => $categories,
+            'priorities' => $priorities
         ]);
 
     } catch (\Exception $e) {
-        Log::error('Error in create form:', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'customer_id' => $this->getAuthUser()->id ?? 'no user'
+        Log::error('Error in create method: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
         ]);
         
         return redirect()->back()
-            ->with('error', 'Error loading form: ' . $e->getMessage());
+            ->with('error', 'Error loading form. Please try again.');
     }
-
-    }
-
+}
     public function store(Request $request)
 {
     Log::info('Store method called:', ['request_data' => $request->all()]);
