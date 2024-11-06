@@ -21,17 +21,48 @@ $admin_route_path = $settings['admin_route_path'];
 
 // Customer Routes
 Route::group([
-    'middleware' => ['web', 'auth:customer'],
+    'middleware' => ['web', 'auth:customer', \App\Http\Middleware\DebugMiddleware::class],
     'prefix' => 'customer/tickets',
     'as' => 'customer.tickets.',
     'namespace' => 'Ticket\Ticketit\Controllers'
 ], function () {
-    Route::get('/', 'TicketsController@index')->name('index');
-    Route::get('/create', 'TicketsController@create')->name('create');
-    Route::post('/', 'TicketsController@store')->name('store');
-    Route::get('/{ticket}', 'TicketsController@show')->name('show');
+    try {
+        Route::get('/', 'TicketsController@index')
+            ->name('index')
+            ->middleware('log.route:customer.tickets.index');
+
+        Route::get('/create', 'TicketsController@create')
+            ->name('create')
+            ->middleware('log.route:customer.tickets.create');
+
+        Route::post('/', 'TicketsController@store')
+            ->name('store')
+            ->middleware('log.route:customer.tickets.store');
+
+        Route::get('/{ticket}', 'TicketsController@show')
+            ->name('show')
+            ->middleware('log.route:customer.tickets.show');
+
+        Log::info('Customer ticket routes registered successfully');
+    } catch (\Exception $e) {
+        Log::error('Error registering customer ticket routes', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
 });
 
+
+Route::aliasMiddleware('log.route', function ($request, $next, $routeName) {
+    Log::info("Route accessed: {$routeName}", [
+        'user' => auth()->guard('customer')->check() ? 
+            auth()->guard('customer')->user()->only(['id', 'name', 'email']) : 'Guest',
+        'method' => $request->method(),
+        'url' => $request->fullUrl(),
+        'ip' => $request->ip()
+    ]);
+    return $next($request);
+});
 // Staff Ticket Routes 
 Route::group([
     'middleware' => ['web', 'auth:web'],
