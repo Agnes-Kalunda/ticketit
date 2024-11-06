@@ -5,39 +5,15 @@
     <div class="row justify-content-center">
         <div class="col-md-8">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ trans('ticketit::lang.create-new-ticket') }}</h5>
-                    <a href="{{ route('customer.tickets.index') }}" class="btn btn-secondary btn-sm">Back to Tickets</a>
+                <div class="card-header">
+                    {{ trans('ticketit::lang.create-new-ticket') }}
                 </div>
 
                 <div class="card-body">
-                    @if(session('success'))
-                        <div class="alert alert-success">
-                            {{ session('success') }}
-                        </div>
-                    @endif
-
-                    @if(session('error'))
-                        <div class="alert alert-danger">
-                            {{ session('error') }}
-                        </div>
-                    @endif
-
-                    @if ($errors->any())
-                        <div class="alert alert-danger">
-                            <ul class="mb-0">
-                                @foreach ($errors->all() as $error)
-                                    <li>{{ $error }}</li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    @endif
-
-                    <form method="POST" action="{{ route('customer.tickets.store') }}" id="ticketForm">
+                    <form method="POST" action="{{ route('customer.tickets.store') }}">
                         @csrf
-                        <input type="hidden" name="debug_info" value="form_submitted">
 
-                        <div class="form-group row mb-3">
+                        <div class="form-group row">
                             <label for="subject" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.subject') }}{{ trans('ticketit::lang.colon') }}
                             </label>
@@ -55,7 +31,7 @@
                             </div>
                         </div>
 
-                        <div class="form-group row mb-3">
+                        <div class="form-group row">
                             <label for="category_name" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.category') }}{{ trans('ticketit::lang.colon') }}
                             </label>
@@ -76,7 +52,7 @@
                             </div>
                         </div>
 
-                        <div class="form-group row mb-3">
+                        <div class="form-group row">
                             <label for="priority_name" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.priority') }}{{ trans('ticketit::lang.colon') }}
                             </label>
@@ -97,7 +73,7 @@
                             </div>
                         </div>
 
-                        <div class="form-group row mb-3">
+                        <div class="form-group row">
                             <label for="content" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.message') }}{{ trans('ticketit::lang.colon') }}
                             </label>
@@ -116,7 +92,7 @@
 
                         <div class="form-group row mb-0">
                             <div class="col-md-8 offset-md-3">
-                                <button type="submit" class="btn btn-primary" id="submitBtn">
+                                <button type="submit" class="btn btn-primary">
                                     {{ trans('ticketit::lang.btn-submit') }}
                                 </button>
                                 <a href="{{ route('customer.dashboard') }}" class="btn btn-link">
@@ -130,29 +106,4 @@
         </div>
     </div>
 </div>
-
-@push('scripts')
-<script>
-document.getElementById('ticketForm').addEventListener('submit', function(e) {
-    var submitBtn = document.getElementById('submitBtn');
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = 'Submitting...';
-});
-</script>
-@endpush
-
-@section('styles')
-<style>
-.card {
-    margin-bottom: 1rem;
-}
-.form-control:focus {
-    border-color: #80bdff;
-    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
-}
-.invalid-feedback {
-    display: block;
-}
-</style>
-@endsection
 @endsection
