@@ -406,50 +406,79 @@ public function updateStatus(Request $request, $id)
     }
 
     public function create()
-    {
-        if (!$this->isCustomer()) {
-            return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', 'Staff members cannot create tickets');
-        }
+{
+    // Authentication check logging
+    Log::info('Create ticket attempt:', [
+        'is_customer' => $this->isCustomer(),
+        'auth_user' => $this->getAuthUser() ? [
+            'id' => $this->getAuthUser()->id,
+            'type' => 'customer'
+        ] : 'no user'
+    ]);
 
-        try {
-            $this->ensureDefaultDataExists();
+    if (!$this->isCustomer()) {
+        Log::warning('Non-customer attempted to access ticket creation');
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('warning', 'Staff members cannot create tickets');
+    }
 
-            $categories = Category::orderBy('name')->pluck('name', 'id');
-            $priorities = Priority::orderBy('name')->pluck('name', 'id');
+    try {
+        $this->ensureDefaultDataExists();
 
-            Log::info('Form data retrieved:', [
-                'categories_count' => count($categories),
-                'priorities_count' => count($priorities)
-            ]);
+        $categories = Category::orderBy('name')->pluck('name', 'id');
+        $priorities = Priority::orderBy('name')->pluck('name', 'id');
 
-            return view('ticketit::tickets.create_customer', [
-                'categories' => $categories,
-                'priorities' => $priorities,
-                'master' => 'layouts.app'
-            ]);
+        Log::info('Form data retrieved:', [
+            'categories_count' => count($categories),
+            'priorities_count' => count($priorities),
+            'categories' => $categories->toArray(),
+            'priorities' => $priorities->toArray(),
+            'customer_id' => $this->getAuthUser()->id
+        ]);
 
-        } catch (\Exception $e) {
-            Log::error('Error in create form: ' . $e->getMessage());
-            return redirect()->back()
-                ->with('error', 'Error loading form: ' . $e->getMessage());
-        }
+        // Debug view path
+        Log::info('Rendering view:', [
+            'view_path' => 'ticketit::tickets.create_customer',
+            'master_layout' => 'layouts.app'
+        ]);
+
+        return view('ticketit::tickets.create_customer', [
+            'categories' => $categories,
+            'priorities' => $priorities,
+            'master' => 'layouts.app'
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error in create form:', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'customer_id' => $this->getAuthUser()->id ?? 'no user'
+        ]);
+        
+        return redirect()->back()
+            ->with('error', 'Error loading form: ' . $e->getMessage());
+    }
+
     }
 
     public function store(Request $request)
 {
-    try {
-        // Debug log
-        Log::info('Ticket store attempt:', [
-            'request_data' => $request->all(),
-            'customer_id' => $this->getAuthUser()->id ?? null
-        ]);
+    Log::info('Store method called:', ['all_request_data' => $request->all()]);
 
+    try {
         if (!$this->isCustomer()) {
+            Log::warning('Non-customer attempted to create ticket');
             return redirect()->route(Setting::grab('main_route').'.index')
                 ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
         }
 
+        // Log customer info
+        Log::info('Customer verified:', [
+            'customer_id' => $this->getAuthUser()->id,
+            'customer_name' => $this->getAuthUser()->name
+        ]);
+
+        // Validate request
         $validator = Validator::make($request->all(), [
             'subject' => 'required|min:3',
             'content' => 'required|min:6',
@@ -458,70 +487,64 @@ public function updateStatus(Request $request, $id)
         ]);
 
         if ($validator->fails()) {
-            Log::error('Validation failed:', ['errors' => $validator->errors()->toArray()]);
+            Log::error('Validation failed:', [
+                'errors' => $validator->errors()->toArray(),
+                'input' => $request->all()
+            ]);
             return redirect()->back()
                 ->withErrors($validator)
                 ->withInput();
         }
 
-        try {
-            // Get category with correct name
-            $category = Category::firstOrCreate(
-                ['name' => $request->category_name],
-                ['color' => $this->getCategoryColor($request->category_name)]
-            );
+        Log::info('Validation passed', ['validated_data' => $request->all()]);
 
-            Log::info('Category processed:', ['category' => $category->toArray()]);
+        // Create category
+        $category = Category::firstOrCreate(
+            ['name' => $request->category_name],
+            ['color' => $this->getCategoryColor($request->category_name)]
+        );
+        Log::info('Category processed:', ['category' => $category->toArray()]);
 
-            // Get priority with correct name
-            $priority = Priority::firstOrCreate(
-                ['name' => $request->priority_name],
-                ['color' => $this->getPriorityColor($request->priority_name)]
-            );
+        // Create priority
+        $priority = Priority::firstOrCreate(
+            ['name' => $request->priority_name],
+            ['color' => $this->getPriorityColor($request->priority_name)]
+        );
+        Log::info('Priority processed:', ['priority' => $priority->toArray()]);
 
-            Log::info('Priority processed:', ['priority' => $priority->toArray()]);
+        // Get status
+        $status = Status::firstOrCreate(
+            ['name' => 'Open'],
+            ['color' => '#f39c12']
+        );
+        Log::info('Status processed:', ['status' => $status->toArray()]);
 
-            // Get default open status
-            $status = Status::firstOrCreate(
-                ['name' => 'Open'],
-                ['color' => '#f39c12']
-            );
+        // Create ticket
+        $ticket = new Ticket([
+            'subject' => $request->subject,
+            'content' => $request->content,
+            'priority_id' => $priority->id,
+            'category_id' => $category->id,
+            'status_id' => $status->id,
+            'customer_id' => $this->getAuthUser()->id
+        ]);
 
-            // Create ticket
-            $ticket = new Ticket();
-            $ticket->subject = $request->subject;
-            $ticket->content = $request->content;
-            $ticket->priority_id = $priority->id;
-            $ticket->category_id = $category->id;
-            $ticket->status_id = $status->id;
-            $ticket->customer_id = $this->getAuthUser()->id;
-            
-            $saved = $ticket->save();
+        Log::info('About to save ticket:', ['ticket_data' => $ticket->toArray()]);
 
-            Log::info('Ticket save attempt:', [
-                'saved' => $saved,
-                'ticket_data' => $ticket->toArray()
-            ]);
-
-            if (!$saved) {
-                throw new \Exception('Failed to save ticket to database');
-            }
-
-            return redirect()->route('customer.tickets.index')
-                ->with('success', 'Ticket has been created successfully!');
-
-        } catch (\Exception $e) {
-            Log::error('Database error:', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
+        if (!$ticket->save()) {
+            throw new \Exception('Failed to save ticket to database');
         }
 
+        Log::info('Ticket saved successfully:', ['ticket_id' => $ticket->id]);
+
+        return redirect()->route('customer.tickets.index')
+            ->with('success', 'Ticket has been created successfully!');
+
     } catch (\Exception $e) {
-        Log::error('Ticket creation failed:', [
+        Log::error('Store method error:', [
             'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
+            'request_data' => $request->all()
         ]);
 
         return redirect()->back()
