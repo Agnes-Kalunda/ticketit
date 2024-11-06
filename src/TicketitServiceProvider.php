@@ -28,19 +28,8 @@ class TicketitServiceProvider extends ServiceProvider
     ];
 
     /**
-     * Simple data retrieval with optional file caching
+     * Register the application services.
      */
-    protected function getData($key, $callback)
-    {
-        try {
-            $data = $callback();
-            return $data;
-        } catch (\Exception $e) {
-            Log::error("Error retrieving data for {$key}: " . $e->getMessage());
-            return collect([]);
-        }
-    }
-
     public function register()
     {
         // Register package config
@@ -49,23 +38,18 @@ class TicketitServiceProvider extends ServiceProvider
         );
 
         // Register Dependencies
-        $this->app->register(\Collective\Html\HtmlServiceProvider::class);
-        $this->app->register(\Jenssegers\Date\DateServiceProvider::class);
-        $this->app->register(\Mews\Purifier\PurifierServiceProvider::class);
+        $this->registerDependencies();
 
         // Register Commands
         $this->commands($this->commands);
 
         // Register Form Macros
-        Form::macro('custom', function ($type, $name, $value = '#000000', $options = []) {
-            return Form::input($type, $name, $value, array_merge(['class' => 'form-control'], $options));
-        });
-
-        // Register Aliases
-        $loader = \Illuminate\Foundation\AliasLoader::getInstance();
-        $loader->alias('Form', \Collective\Html\FormFacade::class);
+        $this->registerFormMacros();
     }
 
+    /**
+     * Bootstrap the application services.
+     */
     public function boot()
     {
         try {
@@ -79,6 +63,9 @@ class TicketitServiceProvider extends ServiceProvider
             // Load Migrations
             $this->loadMigrationsFrom(__DIR__.'/Migrations');
 
+            // Register Middleware
+            $this->registerMiddleware();
+
             // Register Validation Rules
             $this->registerValidationRules();
 
@@ -86,15 +73,55 @@ class TicketitServiceProvider extends ServiceProvider
             $this->publishAssets($viewsDirectory);
 
             if (!$this->checkDatabase()) {
+                Log::warning('Ticketit tables not found, handling installation routes');
+                $this->handleInstallationRoutes();
                 return;
             }
 
             $this->setupPackage();
 
         } catch (\Exception $e) {
-            Log::error('TicketitServiceProvider boot error: ' . $e->getMessage());
+            Log::error('TicketitServiceProvider boot error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             $this->handleInstallationRoutes();
         }
+    }
+
+    protected function registerDependencies()
+    {
+        $this->app->register(\Collective\Html\HtmlServiceProvider::class);
+        $this->app->register(\Jenssegers\Date\DateServiceProvider::class);
+        $this->app->register(\Mews\Purifier\PurifierServiceProvider::class);
+
+        // Register Aliases
+        $loader = \Illuminate\Foundation\AliasLoader::getInstance();
+        $loader->alias('Form', \Collective\Html\FormFacade::class);
+    }
+
+    protected function registerFormMacros()
+    {
+        Form::macro('custom', function ($type, $name, $value = '#000000', $options = []) {
+            return Form::input($type, $name, $value, array_merge(['class' => 'form-control'], $options));
+        });
+    }
+
+    protected function registerMiddleware()
+    {
+        $router = $this->app['router'];
+        
+        // Register Custom Middleware
+        $router->aliasMiddleware('ticketit.customer', 
+            \Ticket\Ticketit\Middleware\CustomerAuthMiddleware::class);
+        
+        $router->aliasMiddleware('ticketit.staff', 
+            \Ticket\Ticketit\Middleware\StaffAuthMiddleware::class);
+        
+        $router->aliasMiddleware('ticketit.admin', 
+            \Ticket\Ticketit\Middleware\AdminAuthMiddleware::class);
+        
+        $router->aliasMiddleware('ticketit.agent', 
+            \Ticket\Ticketit\Middleware\AgentAuthMiddleware::class);
     }
 
     protected function checkDatabase()
@@ -104,22 +131,10 @@ class TicketitServiceProvider extends ServiceProvider
 
     protected function setupPackage()
     {
-        // Setup Database Connection
         $this->setupDatabaseConnection();
-
-        // Setup Event Listeners
         $this->setupEventListeners();
-
-        // Load Routes
         $this->loadRoutes();
-
-        // Register View Composers
-        view()->composer('*', function ($view) {
-            $settings = $this->getData('settings', function () {
-                return Setting::all();
-            });
-            $view->with('setting', $settings);
-        });
+        $this->setupViewComposers();
     }
 
     protected function setupDatabaseConnection()
@@ -139,6 +154,111 @@ class TicketitServiceProvider extends ServiceProvider
         ]]);
     }
 
+    protected function setupEventListeners()
+    {
+        Comment::creating(function ($comment) {
+            if (Setting::grab('comment_notification')) {
+                $notification = new NotificationsController();
+                $notification->newComment($comment);
+            }
+        });
+
+        Ticket::updating(function ($modified_ticket) {
+            $this->handleTicketUpdate($modified_ticket);
+            return true;
+        });
+
+        Ticket::created(function ($ticket) {
+            if (Setting::grab('assigned_notification')) {
+                $notification = new NotificationsController();
+                $notification->newTicketNotifyAgent($ticket);
+            }
+            return true;
+        });
+    }
+
+    protected function handleTicketUpdate($modified_ticket)
+    {
+        $original_ticket = Ticket::find($modified_ticket->id);
+        
+        if (Setting::grab('status_notification')) {
+            if ($original_ticket->status_id != $modified_ticket->status_id || 
+                $original_ticket->completed_at != $modified_ticket->completed_at) {
+                $notification = new NotificationsController();
+                $notification->ticketStatusUpdated($modified_ticket, $original_ticket);
+            }
+        }
+        
+        if (Setting::grab('assigned_notification')) {
+            if ($original_ticket->agent_id != $modified_ticket->agent_id) {
+                $notification = new NotificationsController();
+                $notification->ticketAgentUpdated($modified_ticket, $original_ticket);
+            }
+        }
+    }
+
+    protected function loadRoutes()
+    {
+        $settings = $this->getRouteSettings();
+
+        // Customer Routes
+        Route::group([
+            'middleware' => ['web', 'ticketit.customer'],
+            'prefix' => 'customer/tickets',
+            'as' => 'customer.tickets.',
+            'namespace' => 'Ticket\Ticketit\Controllers'
+        ], function () {
+            Route::get('/', 'TicketsController@index')->name('index');
+            Route::get('/create', 'TicketsController@create')->name('create');
+            Route::post('/', 'TicketsController@store')->name('store');
+            Route::get('/{ticket}', 'TicketsController@show')->name('show');
+        });
+
+        // Staff Routes
+        Route::group([
+            'middleware' => ['web', 'ticketit.staff'],
+            'prefix' => 'staff/tickets',
+            'as' => 'staff.tickets.',
+            'namespace' => 'Ticket\Ticketit\Controllers'
+        ], function () {
+            Route::get('/', 'TicketsController@staffIndex')->name('index');
+            Route::get('/{ticket}', 'TicketsController@staffShow')->name('show');
+            Route::post('/{ticket}/status', 'TicketsController@updateStatus')->name('status.update');
+        });
+
+        // Admin Routes
+        Route::group([
+            'middleware' => ['web', 'ticketit.admin'],
+            'prefix' => $settings['admin_route_path'],
+            'as' => 'admin.',
+            'namespace' => 'Ticket\Ticketit\Controllers'
+        ], function () {
+            Route::resource('status', 'StatusesController');
+            Route::resource('priority', 'PrioritiesController');
+            Route::resource('category', 'CategoriesController');
+        });
+    }
+
+    protected function getRouteSettings()
+    {
+        return [
+            'main_route' => Setting::grab('main_route') ?: 'tickets',
+            'main_route_path' => Setting::grab('main_route_path') ?: 'tickets',
+            'admin_route' => Setting::grab('admin_route') ?: 'tickets-admin',
+            'admin_route_path' => Setting::grab('admin_route_path') ?: 'tickets-admin'
+        ];
+    }
+
+    protected function setupViewComposers()
+    {
+        view()->composer('*', function ($view) {
+            $settings = Cache::remember('ticketit_settings', 60, function () {
+                return Setting::all();
+            });
+            $view->with('setting', $settings);
+        });
+    }
+
     protected function publishAssets($viewsDirectory)
     {
         $this->publishes([
@@ -155,84 +275,6 @@ class TicketitServiceProvider extends ServiceProvider
     {
         $this->app['validator']->extend('exists_ticket', function ($attribute, $value, $parameters) {
             return DB::table($parameters[0])->where('id', $value)->exists();
-        });
-    }
-
-    protected function setupEventListeners()
-    {
-        Comment::creating(function ($comment) {
-            if (Setting::grab('comment_notification')) {
-                $notification = new NotificationsController();
-                $notification->newComment($comment);
-            }
-        });
-
-        Ticket::updating(function ($modified_ticket) {
-            if (Setting::grab('status_notification')) {
-                $original_ticket = Ticket::find($modified_ticket->id);
-                if ($original_ticket->status_id != $modified_ticket->status_id || 
-                    $original_ticket->completed_at != $modified_ticket->completed_at) {
-                    $notification = new NotificationsController();
-                    $notification->ticketStatusUpdated($modified_ticket, $original_ticket);
-                }
-            }
-            return true;
-        });
-
-        Ticket::created(function ($ticket) {
-            if (Setting::grab('assigned_notification')) {
-                $notification = new NotificationsController();
-                $notification->newTicketNotifyAgent($ticket);
-            }
-            return true;
-        });
-    }
-
-    protected function loadRoutes()
-    {
-        $settings = [
-            'main_route' => Setting::grab('main_route') ?: 'tickets',
-            'main_route_path' => Setting::grab('main_route_path') ?: 'tickets',
-            'admin_route' => Setting::grab('admin_route') ?: 'tickets-admin',
-            'admin_route_path' => Setting::grab('admin_route_path') ?: 'tickets-admin'
-        ];
-
-        // Customer Routes
-        Route::group([
-            'middleware' => ['web', 'auth:customer'],
-            'prefix' => 'customer/tickets'
-        ], function () {
-            Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@index')
-                ->name('customer.tickets.index');
-            Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
-                ->name('customer.tickets.create');
-            Route::post('/', 'Ticket\Ticketit\Controllers\TicketsController@store')
-                ->name('customer.tickets.store');
-            Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@show')
-                ->name('customer.tickets.show');
-        });
-
-        // Staff Routes
-        Route::group([
-            'middleware' => ['web', 'auth'],
-            'prefix' => 'staff/tickets'
-        ], function () {
-            Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@staffIndex')
-                ->name('staff.tickets.index');
-            Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@staffShow')
-                ->name('staff.tickets.show');
-            Route::post('/{ticket}/status', 'Ticket\Ticketit\Controllers\TicketsController@updateStatus')
-                ->name('staff.tickets.status.update');
-        });
-
-        // Admin Routes
-        Route::group([
-            'middleware' => ['web', 'auth', 'Ticket\Ticketit\Middleware\IsAdminMiddleware'],
-            'prefix' => $settings['admin_route_path']
-        ], function () {
-            Route::resource('status', 'Ticket\Ticketit\Controllers\StatusesController');
-            Route::resource('priority', 'Ticket\Ticketit\Controllers\PrioritiesController');
-            Route::resource('category', 'Ticket\Ticketit\Controllers\CategoriesController');
         });
     }
 
