@@ -2,148 +2,149 @@
 
 namespace Ticket\Ticketit\Models;
 
-use Cache;
 use Illuminate\Database\Eloquent\Model;
-use Ticket\Ticketit\Models\Setting as Table;
-use Ticket\Ticketit\Helpers\LaravelVersion;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class Setting extends Model
 {
-    /**
-     * @var array
-     */
-    protected $fillable = ['lang', 'slug', 'value', 'default'];
-    /**
-     * @var string
-     */
     protected $table = 'ticketit_settings';
+    protected $fillable = ['lang', 'slug', 'value', 'default'];
 
     /**
-     * Returns one of three columns by slug.
-     * Priority: lang, value, default.
-     *
-     * @param $query
-     * @param $slug
-     *
-     * @return mixed
+     * Get setting value by slug
      */
-    public function scopeBySlug($query, $slug)
+    public static function grab($slug, $default = null)
     {
-        return $query->whereSlug($slug);
-    }
+        try {
+            Log::info("Getting setting for slug: $slug");
+            
+            return Cache::remember("ticketit::settings.$slug", 60, function () use ($slug, $default) {
+                $setting = static::where('slug', $slug)->first();
+                
+                if (!$setting) {
+                    Log::warning("Setting not found for slug: $slug");
+                    return $default;
+                }
 
-    /**
-     * Grab a setting from cached Settings table by slug.
-     * Cache lifetime: 60 minutes.
-     *
-     * @param $slug
-     *
-     * @return mixed
-     */
-    public static function grab($slug)
-    {
-        /*
-         * Comment out prior to 0.2 launch. Will cause massive amount
-         * of Database queries. Only for adding new settings while
-         * in development and testing.
-         */
-        //       Cache::flush();
+                // If we have a language key, translate it
+                if ($setting->lang) {
+                    return trans($setting->lang);
+                }
 
-        // seconds expected for L5.8<=, minutes before that
-        $time = LaravelVersion::min('5.8') ? 60*60 : 60;
+                // If the value is serialized, unserialize it
+                if (static::isSerialized($setting->value)) {
+                    return unserialize($setting->value);
+                }
 
-        $setting = Cache::remember('ticketit::settings.'.$slug, $time, function () use ($slug, $time) {
-            $settings = Cache::remember('ticketit::settings', $time, function () {
-                return Table::all();
+                Log::info("Setting found", [
+                    'slug' => $slug,
+                    'value' => $setting->value
+                ]);
+
+                return $setting->value;
             });
 
-            $setting = $settings->where('slug', $slug)->first();
-
-            if ($setting->lang) {
-                return trans($setting->lang);
-            }
-
-            if (self::is_serialized($setting->value)) {
-                $setting = unserialize($setting->value);
-            } else {
-                $setting = $setting->value;
-            }
-
-            return $setting;
-        });
-
-        return $setting;
+        } catch (\Exception $e) {
+            Log::error("Error getting setting for slug: $slug", [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $default;
+        }
     }
 
     /**
-     * Check if a parameter under Value or Default columns
-     * is serialized.
-     *
-     * @param $data
-     * @param $strict
-     *
-     * @return bool
+     * Check if a value is serialized
      */
-    public static function is_serialized($data, $strict = true)
+    public static function isSerialized($data)
     {
-        // if it isn't a string, it isn't serialized.
         if (!is_string($data)) {
             return false;
         }
+
         $data = trim($data);
-        if ('N;' == $data) {
+
+        if ('N;' === $data) {
             return true;
         }
+
         if (strlen($data) < 4) {
             return false;
         }
+
         if (':' !== $data[1]) {
             return false;
         }
-        if ($strict) {
-            $lastc = substr($data, -1);
-            if (';' !== $lastc && '}' !== $lastc) {
-                return false;
-            }
-        } else {
-            $semicolon = strpos($data, ';');
-            $brace = strpos($data, '}');
-            // Either ; or } must exist.
-            if (false === $semicolon && false === $brace) {
-                return false;
-            }
 
-            // But neither must be in the first X characters.
-            if (false !== $semicolon && $semicolon < 3) {
-                return false;
-            }
-
-            if (false !== $brace && $brace < 4) {
-                return false;
-            }
+        $lastchar = substr($data, -1);
+        if (';' !== $lastchar && '}' !== $lastchar) {
+            return false;
         }
+
         $token = $data[0];
         switch ($token) {
             case 's':
-                if ($strict) {
-                    if ('"' !== substr($data, -2, 1)) {
-                        return false;
-                    }
-                } elseif (false === strpos($data, '"')) {
+                if ('"' !== substr($data, -2, 1)) {
                     return false;
                 }
-            // or else fall through
+                // Fall through
             case 'a':
             case 'O':
                 return (bool) preg_match("/^{$token}:[0-9]+:/s", $data);
             case 'b':
             case 'i':
             case 'd':
-                $end = $strict ? '$' : '';
-
-                return (bool) preg_match("/^{$token}:[0-9.E-]+;$end/", $data);
+                return (bool) preg_match("/^{$token}:[0-9.E-]+;$/", $data);
         }
 
         return false;
+    }
+
+    /**
+     * Clear setting cache
+     */
+    public static function clearCache($slug = null)
+    {
+        if ($slug) {
+            Cache::forget("ticketit::settings.$slug");
+        } else {
+            $settings = static::all();
+            foreach ($settings as $setting) {
+                Cache::forget("ticketit::settings.{$setting->slug}");
+            }
+        }
+    }
+
+    /**
+     * Set a setting value
+     */
+    public static function set($slug, $value, $default = null)
+    {
+        try {
+            $setting = static::where('slug', $slug)->first();
+            
+            if (!$setting) {
+                $setting = static::create([
+                    'slug' => $slug,
+                    'value' => is_array($value) ? json_encode($value) : $value,
+                    'default' => is_array($default) ? json_encode($default) : ($default ?? $value)
+                ]);
+            } else {
+                $setting->value = is_array($value) ? json_encode($value) : $value;
+                $setting->save();
+            }
+
+            static::clearCache($slug);
+            
+            return $setting;
+
+        } catch (\Exception $e) {
+            Log::error("Error setting value for slug: $slug", [
+                'error' => $e->getMessage(),
+                'value' => $value
+            ]);
+            return false;
+        }
     }
 }
