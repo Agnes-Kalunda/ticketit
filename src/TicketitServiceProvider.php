@@ -74,7 +74,7 @@ class TicketitServiceProvider extends ServiceProvider
         try {
             // Initialize publish groups
             $this->setupPublishGroups();
-            
+
             // Load core components
             $this->loadCoreComponents();
 
@@ -163,7 +163,7 @@ class TicketitServiceProvider extends ServiceProvider
         $loader->alias('Form', \Collective\Html\FormFacade::class);
     }
 
-    
+
 
     protected function registerFormMacros()
     {
@@ -176,7 +176,7 @@ class TicketitServiceProvider extends ServiceProvider
     {
         try {
             $router = $this->app['router'];
-            
+
             // Debug middleware
             $router->aliasMiddleware('ticketit.debug', function(Request $request, \Closure $next) {
                 Log::info('Ticketit Request:', [
@@ -196,13 +196,13 @@ class TicketitServiceProvider extends ServiceProvider
             // Register core middleware
             $router->aliasMiddleware('ticketit.customer', 
                 \Ticket\Ticketit\Middleware\CustomerAuthMiddleware::class);
-            
+
             $router->aliasMiddleware('ticketit.staff', 
                 \Ticket\Ticketit\Middleware\StaffAuthMiddleware::class);
-            
+
             $router->aliasMiddleware('ticketit.admin', 
                 \Ticket\Ticketit\Middleware\AdminAuthMiddleware::class);
-            
+
             $router->aliasMiddleware('ticketit.agent', 
                 \Ticket\Ticketit\Middleware\AgentAuthMiddleware::class);
 
@@ -289,7 +289,7 @@ class TicketitServiceProvider extends ServiceProvider
     {
         try {
             $original_ticket = Ticket::find($modified_ticket->id);
-            
+
             if (Setting::grab('status_notification')) {
                 if ($original_ticket->status_id != $modified_ticket->status_id || 
                     $original_ticket->completed_at != $modified_ticket->completed_at) {
@@ -297,7 +297,7 @@ class TicketitServiceProvider extends ServiceProvider
                     $notification->ticketStatusUpdated($modified_ticket, $original_ticket);
                 }
             }
-            
+
             if (Setting::grab('assigned_notification')) {
                 if ($original_ticket->agent_id != $modified_ticket->agent_id) {
                     $notification = new NotificationsController();
@@ -377,7 +377,7 @@ class TicketitServiceProvider extends ServiceProvider
                     ];
 
                     Log::info('View composer debug info:', $debug);
-                    
+
                     $view->with('debug', $debug);
                     $view->with('setting', $settings);
 
@@ -394,87 +394,129 @@ class TicketitServiceProvider extends ServiceProvider
     protected function publishAssets($viewsDirectory)
 {
     try {
+        // Log start of publishing process
         Log::info('Starting asset publishing process', [
             'views_directory' => $viewsDirectory,
             'views_exists' => file_exists($viewsDirectory)
         ]);
 
-        // Define all publish paths
+        // publish paths
         $publishPaths = [
-            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
-            __DIR__.'/Migrations' => database_path('migrations'),
-            __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
             $viewsDirectory => resource_path('views/vendor/ticketit'),
+            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
             __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
             __DIR__.'/Public' => public_path('vendor/ticketit'),
         ];
 
-        
-        foreach ($publishPaths as $source => $destination) {
-            Log::info('Checking source path', [
-                'source' => $source,
-                'exists' => file_exists($source)
-            ]);
-        }
+        // base directories first
+        $directories = [
+            resource_path('views/vendor'),
+            resource_path('views/vendor/ticketit'),
+            resource_path('lang/vendor'),
+            public_path('vendor'),
+            config_path(),
+        ];
 
-        // Publish assets
-        $this->publishes($publishPaths, 'ticketit-assets');
-
-        // Create destination directories if they don't exist
-        foreach ($publishPaths as $source => $destination) {
-            $directory = dirname($destination);
+        foreach ($directories as $directory) {
             if (!file_exists($directory)) {
                 mkdir($directory, 0755, true);
                 Log::info('Created directory', ['path' => $directory]);
             }
         }
 
-        // Force copy files
+        // Log source paths
         foreach ($publishPaths as $source => $destination) {
+            Log::info('Processing path', [
+                'source' => $source,
+                'destination' => $destination,
+                'source_exists' => file_exists($source),
+                'is_dir' => is_dir($source)
+            ]);
+
+            // Create destination directory if needed
+            $destDir = is_dir($source) ? $destination : dirname($destination);
+            if (!file_exists($destDir)) {
+                mkdir($destDir, 0755, true);
+                Log::info('Created destination directory', ['path' => $destDir]);
+            }
+
+            // Copy files
             if (is_dir($source)) {
                 $this->copyDirectory($source, $destination);
+                Log::info('Copied directory', [
+                    'from' => $source,
+                    'to' => $destination
+                ]);
             } else {
                 copy($source, $destination);
+                Log::info('Copied file', [
+                    'from' => $source,
+                    'to' => $destination
+                ]);
             }
-            Log::info('Copied assets', [
-                'from' => $source,
-                'to' => $destination
-            ]);
         }
+
+        // Register with Laravel's publisher
+        $this->publishes($publishPaths, 'ticketit-assets');
+
+        // Verify published files
+        foreach ($publishPaths as $source => $destination) {
+            if (!file_exists($destination)) {
+                Log::warning('Failed to publish path', [
+                    'destination' => $destination
+                ]);
+            } else {
+                Log::info('Successfully published', [
+                    'destination' => $destination
+                ]);
+            }
+        }
+
+        Log::info('Asset publishing completed');
 
     } catch (\Exception $e) {
         Log::error('Error publishing assets: ' . $e->getMessage(), [
             'trace' => $e->getTraceAsString()
         ]);
+        throw $e;
     }
 }
 
-
     protected function copyDirectory($source, $destination)
     {
-        if (!is_dir($destination)) {
-            mkdir($destination, 0755, true);
-        }
-
-        $dir = opendir($source);
-        while (($file = readdir($dir)) !== false) {
-            if ($file === '.' || $file === '..') {
-                continue;
+        try {
+            if (!is_dir($destination)) {
+                mkdir($destination, 0755, true);
             }
 
-            $sourcePath = $source . '/' . $file;
-            $destinationPath = $destination . '/' . $file;
+            $dir = opendir($source);
+            while (($file = readdir($dir)) !== false) {
+                if ($file === '.' || $file === '..') {
+                    continue;
+                }
 
-            if (is_dir($sourcePath)) {
-                $this->copyDirectory($sourcePath, $destinationPath);
-            } else {
-                copy($sourcePath, $destinationPath);
+                $sourcePath = $source . '/' . $file;
+                $destinationPath = $destination . '/' . $file;
+
+                if (is_dir($sourcePath)) {
+                    $this->copyDirectory($sourcePath, $destinationPath);
+                } else {
+                    copy($sourcePath, $destinationPath);
+                    Log::info('Copied file', [
+                        'from' => $sourcePath,
+                        'to' => $destinationPath
+                    ]);
+                }
             }
+            closedir($dir);
+        } catch (\Exception $e) {
+            Log::error('Error copying directory: ' . $e->getMessage(), [
+                'source' => $source,
+                'destination' => $destination
+            ]);
+            throw $e;
         }
-        closedir($dir);
-
     }
-
     protected function registerValidationRules()
     {
         try {
@@ -534,7 +576,7 @@ class TicketitServiceProvider extends ServiceProvider
             });
 
             Log::info('Installation routes registered successfully');
-            
+
         } catch (\Exception $e) {
             Log::error('Error setting up installation routes: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
