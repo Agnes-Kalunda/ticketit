@@ -30,7 +30,8 @@
         "laravel": {
             "providers": [
                 "Ticket\\Ticketit\\TicketitServiceProvider"
-            ]
+            ],
+            "dont-discover":[]
         }
     },
     "require-dev": {
