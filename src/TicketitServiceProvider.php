@@ -394,77 +394,129 @@ class TicketitServiceProvider extends ServiceProvider
     protected function publishAssets($viewsDirectory)
 {
     try {
+        // Log start of publishing process
         Log::info('Starting asset publishing process', [
             'views_directory' => $viewsDirectory,
             'views_exists' => file_exists($viewsDirectory)
         ]);
-        // Define all publish paths
+
+        // publish paths
         $publishPaths = [
-            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
-            __DIR__.'/Migrations' => database_path('migrations'),
-            __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
             $viewsDirectory => resource_path('views/vendor/ticketit'),
+            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
             __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
             __DIR__.'/Public' => public_path('vendor/ticketit'),
         ];
-        
-        foreach ($publishPaths as $source => $destination) {
-            Log::info('Checking source path', [
-                'source' => $source,
-                'exists' => file_exists($source)
-            ]);
-        }
 
-        // Publish assets
-        $this->publishes($publishPaths, 'ticketit-assets');
-        // Create destination directories if they don't exist
-        foreach ($publishPaths as $source => $destination) {
-            $directory = dirname($destination);
+        // base directories first
+        $directories = [
+            resource_path('views/vendor'),
+            resource_path('views/vendor/ticketit'),
+            resource_path('lang/vendor'),
+            public_path('vendor'),
+            config_path(),
+        ];
+
+        foreach ($directories as $directory) {
             if (!file_exists($directory)) {
                 mkdir($directory, 0755, true);
                 Log::info('Created directory', ['path' => $directory]);
             }
         }
 
-        // Force copy files
+        // Log source paths
         foreach ($publishPaths as $source => $destination) {
+            Log::info('Processing path', [
+                'source' => $source,
+                'destination' => $destination,
+                'source_exists' => file_exists($source),
+                'is_dir' => is_dir($source)
+            ]);
+
+            // Create destination directory if needed
+            $destDir = is_dir($source) ? $destination : dirname($destination);
+            if (!file_exists($destDir)) {
+                mkdir($destDir, 0755, true);
+                Log::info('Created destination directory', ['path' => $destDir]);
+            }
+
+            // Copy files
             if (is_dir($source)) {
                 $this->copyDirectory($source, $destination);
+                Log::info('Copied directory', [
+                    'from' => $source,
+                    'to' => $destination
+                ]);
             } else {
                 copy($source, $destination);
+                Log::info('Copied file', [
+                    'from' => $source,
+                    'to' => $destination
+                ]);
             }
-            Log::info('Copied assets', [
-                'from' => $source,
-                'to' => $destination
-            ]);
         }
+
+        // Register with Laravel's publisher
+        $this->publishes($publishPaths, 'ticketit-assets');
+
+        // Verify published files
+        foreach ($publishPaths as $source => $destination) {
+            if (!file_exists($destination)) {
+                Log::warning('Failed to publish path', [
+                    'destination' => $destination
+                ]);
+            } else {
+                Log::info('Successfully published', [
+                    'destination' => $destination
+                ]);
+            }
+        }
+
+        Log::info('Asset publishing completed');
+
     } catch (\Exception $e) {
         Log::error('Error publishing assets: ' . $e->getMessage(), [
             'trace' => $e->getTraceAsString()
         ]);
+        throw $e;
     }
 }
+
     protected function copyDirectory($source, $destination)
     {
-        if (!is_dir($destination)) {
-            mkdir($destination, 0755, true);
-        }
-        $dir = opendir($source);
-        while (($file = readdir($dir)) !== false) {
-            if ($file === '.' || $file === '..') {
-                continue;
+        try {
+            if (!is_dir($destination)) {
+                mkdir($destination, 0755, true);
             }
-            $sourcePath = $source . '/' . $file;
-            $destinationPath = $destination . '/' . $file;
-            if (is_dir($sourcePath)) {
-                $this->copyDirectory($sourcePath, $destinationPath);
-            } else {
-                copy($sourcePath, $destinationPath);
-            }
-        }
-        closedir($dir);
-    }
 
+            $dir = opendir($source);
+            while (($file = readdir($dir)) !== false) {
+                if ($file === '.' || $file === '..') {
+                    continue;
+                }
+
+                $sourcePath = $source . '/' . $file;
+                $destinationPath = $destination . '/' . $file;
+
+                if (is_dir($sourcePath)) {
+                    $this->copyDirectory($sourcePath, $destinationPath);
+                } else {
+                    copy($sourcePath, $destinationPath);
+                    Log::info('Copied file', [
+                        'from' => $sourcePath,
+                        'to' => $destinationPath
+                    ]);
+                }
+            }
+            closedir($dir);
+        } catch (\Exception $e) {
+            Log::error('Error copying directory: ' . $e->getMessage(), [
+                'source' => $source,
+                'destination' => $destination
+            ]);
+            throw $e;
+        }
+    }
     protected function registerValidationRules()
     {
         try {
