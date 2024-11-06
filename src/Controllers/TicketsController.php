@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\View;
 
 use Ticket\Ticketit\Seeds\TicketitTableSeeder;
 use Ticket\Ticketit\Helpers\TicketitLogger as Logger;
@@ -408,36 +409,45 @@ public function updateStatus(Request $request, $id)
     }
 
     public function create()
-    {
-        if (!$this->isCustomer()) {
-            return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', 'Staff members cannot create tickets');
-        }
-
-        try {
-            $this->ensureDefaultDataExists();
-
-            $categories = Category::orderBy('name')->pluck('name', 'id');
-            $priorities = Priority::orderBy('name')->pluck('name', 'id');
-
-            Log::info('Form data retrieved:', [
-                'categories_count' => count($categories),
-                'priorities_count' => count($priorities)
-            ]);
-
-            return view('ticketit::tickets.create_customer', [
-                'categories' => $categories,
-                'priorities' => $priorities,
-                'master' => 'layouts.app'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error in create form: ' . $e->getMessage());
-            return redirect()->back()
-                ->with('error', 'Error loading form: ' . $e->getMessage());
-        }
+{
+    if (!$this->isCustomer()) {
+        return redirect()->route(Setting::grab('main_route').'.index')
+            ->with('warning', 'Staff members cannot create tickets');
     }
 
+    try {
+        $this->ensureDefaultDataExists();
+
+        $categories = Category::orderBy('name')->pluck('name', 'id');
+        $priorities = Priority::orderBy('name')->pluck('name', 'id');
+
+        // Debug view resolution
+        Log::info('Resolving create_customer view', [
+            'view_paths' => View::getFinder()->getPaths(),
+            'view_hints' => View::getFinder()->getHints(),
+            'attempting_view' => 'ticketit::tickets.create_customer'
+        ]);
+
+        // multiple view resolution paths
+        $view = 'ticketit::tickets.create_customer';
+        if (!View::exists($view)) {
+            $view = 'vendor.ticketit.tickets.create_customer';
+        }
+
+        return view($view, [
+            'categories' => $categories,
+            'priorities' => $priorities,
+            'master' => 'layouts.app'
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error in create form: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        return redirect()->back()
+            ->with('error', 'Error loading form: ' . $e->getMessage());
+    }
+}
     public function store(Request $request)
     {
         Log::info('Ticket store method called', [

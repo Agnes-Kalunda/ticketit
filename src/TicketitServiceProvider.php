@@ -46,24 +46,21 @@ class TicketitServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        // Register package config first
+        // Register config first
         $this->mergeConfigFrom(
             __DIR__.'/Config/ticketit.php', 'ticketit'
         );
-
-        // Register Dependencies
+    
+        // Register dependencies
         $this->registerDependencies();
-
-        // Register Commands - Make sure they're registered even if tables don't exist
+    
+       
         if ($this->app->runningInConsole()) {
             $this->commands([
-                SeedTicketit::class,
-                TicketDebugCommand::class
+                'Ticket\Ticketit\Console\Commands\SeedTicketit',
+                'Ticket\Ticketit\Console\Commands\TicketDebugCommand'
             ]);
         }
-
-        // Register Form Macros
-        $this->registerFormMacros();
     }
 
     /**
@@ -103,44 +100,90 @@ class TicketitServiceProvider extends ServiceProvider
 {
     $viewsDirectory = __DIR__.'/Views/bootstrap3';
 
-    $this->ticketitPublishGroups = [
+    // Debug paths
+    Log::info('Setting up publish paths', [
+        'views' => $viewsDirectory,
+        'migrations' => __DIR__.'/Migrations',
+        'config' => __DIR__.'/Config',
+        'translations' => __DIR__.'/Translations',
+        'routes' => __DIR__.'/routes.php',
+        'public' => __DIR__.'/Public'
+    ]);
+
+    // Register views with namespace
+    $this->loadViewsFrom($viewsDirectory, 'ticketit');
+    
+    // Published views take precedence
+    $publishedPath = resource_path('views/vendor/ticketit');
+    if (file_exists($publishedPath)) {
+        $this->loadViewsFrom($publishedPath, 'ticketit');
+    }
+
+    
+    $publishGroups = [
+        // Config publishing
         'ticketit-config' => [
             __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
         ],
+
+        // Migration publishing
         'ticketit-migrations' => [
-            __DIR__.'/Migrations' => database_path('migrations'),
+            __DIR__.'/Migrations' => database_path('migrations')
         ],
+
+        // View publishing
         'ticketit-views' => [
             $viewsDirectory => resource_path('views/vendor/ticketit'),
         ],
+
+        // Translation publishing
         'ticketit-lang' => [
             __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
         ],
+
+        // Public assets publishing
         'ticketit-public' => [
             __DIR__.'/Public' => public_path('vendor/ticketit'),
         ],
+
+        // Routes publishing
         'ticketit-routes' => [
-            __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
+            __DIR__.'/routes.php' => base_path('routes/ticketit.php')
         ],
     ];
 
-    Log::info('Publishing groups set up', [
-        'groups' => array_keys($this->ticketitPublishGroups)
-    ]);
-
-    // Publish each group individually
-    foreach ($this->ticketitPublishGroups as $tag => $paths) {
-        $this->publishes($paths, $tag);
+    // Register each publish group
+    foreach ($publishGroups as $group => $paths) {
+        $this->publishes($paths, $group);
     }
 
-    // Publish all assets together
+    // Register all assets together
     $allPaths = [];
-    foreach ($this->ticketitPublishGroups as $paths) {
+    foreach ($publishGroups as $paths) {
         $allPaths = array_merge($allPaths, $paths);
     }
     $this->publishes($allPaths, 'ticketit-assets');
+
+
+    $this->loadMigrationsFrom(__DIR__.'/Migrations');
+    $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
+
+
+    $routesPath = base_path('routes/ticketit.php');
+    if (file_exists($routesPath)) {
+        $this->loadRoutesFrom($routesPath);
+    } else {
+        $this->loadRoutesFrom(__DIR__.'/routes.php');
+    }
 }
 
+
+    protected function registerPublishCommand()
+    {
+        $this->publishes([
+            __DIR__.'/Views/bootstrap3' => resource_path('views/vendor/ticketit'),
+        ], 'ticketit-views');
+    }
 
     protected function loadCoreComponents()
     {
@@ -211,14 +254,17 @@ class TicketitServiceProvider extends ServiceProvider
         }
     }
     protected function registerDependencies()
-    {
-        $this->app->register(\Collective\Html\HtmlServiceProvider::class);
-        $this->app->register(\Jenssegers\Date\DateServiceProvider::class);
-        $this->app->register(\Mews\Purifier\PurifierServiceProvider::class);
+{
+    
+    $this->app->register(\Collective\Html\HtmlServiceProvider::class);
+    $this->app->register(\Jenssegers\Date\DateServiceProvider::class);
+    $this->app->register(\Mews\Purifier\PurifierServiceProvider::class);
 
-        $loader = \Illuminate\Foundation\AliasLoader::getInstance();
-        $loader->alias('Form', \Collective\Html\FormFacade::class);
-    }
+    // Register facades
+    $loader = \Illuminate\Foundation\AliasLoader::getInstance();
+    $loader->alias('Form', \Collective\Html\FormFacade::class);
+    $loader->alias('View', \Illuminate\Support\Facades\View::class);
+}
 
 
 
@@ -448,94 +494,43 @@ class TicketitServiceProvider extends ServiceProvider
         }
     }
 
-    protected function publishAssets($viewsDirectory)
+    protected function publishAssets()
 {
     try {
-        // Log start of publishing process
-        Log::info('Starting asset publishing process', [
-            'views_directory' => $viewsDirectory,
-            'views_exists' => file_exists($viewsDirectory)
-        ]);
+        if ($this->app->runningInConsole()) {
+            // Ensure directories exist
+            $directories = [
+                resource_path('views/vendor'),
+                resource_path('views/vendor/ticketit'),
+                resource_path('lang/vendor'),
+                resource_path('lang/vendor/ticketit'),
+                public_path('vendor/ticketit'),
+                database_path('migrations'),
+            ];
 
-        // publish paths
-        $publishPaths = [
-            $viewsDirectory => resource_path('views/vendor/ticketit'),
-            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
-            __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
-            __DIR__.'/Public' => public_path('vendor/ticketit'),
-        ];
-
-        // base directories first
-        $directories = [
-            resource_path('views/vendor'),
-            resource_path('views/vendor/ticketit'),
-            resource_path('lang/vendor'),
-            public_path('vendor'),
-            config_path(),
-        ];
-
-        foreach ($directories as $directory) {
-            if (!file_exists($directory)) {
-                mkdir($directory, 0755, true);
-                Log::info('Created directory', ['path' => $directory]);
+            foreach ($directories as $directory) {
+                if (!file_exists($directory)) {
+                    mkdir($directory, 0755, true);
+                    Log::info("Created directory: {$directory}");
+                }
             }
+
+            // Publish all assets
+            $this->publishes([
+                __DIR__.'/Views/bootstrap3' => resource_path('views/vendor/ticketit'),
+                __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
+                __DIR__.'/Public' => public_path('vendor/ticketit'),
+                __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
+                __DIR__.'/Migrations' => database_path('migrations'),
+                __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
+            ], 'ticketit-assets');
+
+            Log::info('Published all assets successfully');
         }
-
-        // Log source paths
-        foreach ($publishPaths as $source => $destination) {
-            Log::info('Processing path', [
-                'source' => $source,
-                'destination' => $destination,
-                'source_exists' => file_exists($source),
-                'is_dir' => is_dir($source)
-            ]);
-
-            // Create destination directory if needed
-            $destDir = is_dir($source) ? $destination : dirname($destination);
-            if (!file_exists($destDir)) {
-                mkdir($destDir, 0755, true);
-                Log::info('Created destination directory', ['path' => $destDir]);
-            }
-
-            // Copy files
-            if (is_dir($source)) {
-                $this->copyDirectory($source, $destination);
-                Log::info('Copied directory', [
-                    'from' => $source,
-                    'to' => $destination
-                ]);
-            } else {
-                copy($source, $destination);
-                Log::info('Copied file', [
-                    'from' => $source,
-                    'to' => $destination
-                ]);
-            }
-        }
-
-        // Register with Laravel's publisher
-        $this->publishes($publishPaths, 'ticketit-assets');
-
-        // Verify published files
-        foreach ($publishPaths as $source => $destination) {
-            if (!file_exists($destination)) {
-                Log::warning('Failed to publish path', [
-                    'destination' => $destination
-                ]);
-            } else {
-                Log::info('Successfully published', [
-                    'destination' => $destination
-                ]);
-            }
-        }
-
-        Log::info('Asset publishing completed');
-
     } catch (\Exception $e) {
         Log::error('Error publishing assets: ' . $e->getMessage(), [
             'trace' => $e->getTraceAsString()
         ]);
-        throw $e;
     }
 }
 
