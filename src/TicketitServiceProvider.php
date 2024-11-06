@@ -392,28 +392,87 @@ class TicketitServiceProvider extends ServiceProvider
     }
 
     protected function publishAssets($viewsDirectory)
-    {
-        try {
-            Log::info('Publishing assets', [
-                'source_directory' => $viewsDirectory,
-                'publish_groups' => array_keys($this->ticketitPublishGroups)
-            ]);
+{
+    try {
+        Log::info('Starting asset publishing process', [
+            'views_directory' => $viewsDirectory,
+            'views_exists' => file_exists($viewsDirectory)
+        ]);
 
-            // Publish each group
-            foreach ($this->ticketitPublishGroups as $tag => $paths) {
-                $this->publishes($paths, $tag);
-                
-                // Verify published paths
-                foreach ($paths as $source => $destination) {
-                    if (!file_exists($destination)) {
-                        Log::warning("Destination path does not exist after publishing: {$destination}");
-                    }
-                }
+        // Define all publish paths
+        $publishPaths = [
+            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
+            __DIR__.'/Migrations' => database_path('migrations'),
+            __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
+            $viewsDirectory => resource_path('views/vendor/ticketit'),
+            __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
+            __DIR__.'/Public' => public_path('vendor/ticketit'),
+        ];
+
+        
+        foreach ($publishPaths as $source => $destination) {
+            Log::info('Checking source path', [
+                'source' => $source,
+                'exists' => file_exists($source)
+            ]);
+        }
+
+        // Publish assets
+        $this->publishes($publishPaths, 'ticketit-assets');
+
+        // Create destination directories if they don't exist
+        foreach ($publishPaths as $source => $destination) {
+            $directory = dirname($destination);
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+                Log::info('Created directory', ['path' => $directory]);
+            }
+        }
+
+        // Force copy files
+        foreach ($publishPaths as $source => $destination) {
+            if (is_dir($source)) {
+                $this->copyDirectory($source, $destination);
+            } else {
+                copy($source, $destination);
+            }
+            Log::info('Copied assets', [
+                'from' => $source,
+                'to' => $destination
+            ]);
+        }
+
+    } catch (\Exception $e) {
+        Log::error('Error publishing assets: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+}
+
+
+    protected function copyDirectory($source, $destination)
+    {
+        if (!is_dir($destination)) {
+            mkdir($destination, 0755, true);
+        }
+
+        $dir = opendir($source);
+        while (($file = readdir($dir)) !== false) {
+            if ($file === '.' || $file === '..') {
+                continue;
             }
 
-        } catch (\Exception $e) {
-            Log::error('Error publishing assets: ' . $e->getMessage());
+            $sourcePath = $source . '/' . $file;
+            $destinationPath = $destination . '/' . $file;
+
+            if (is_dir($sourcePath)) {
+                $this->copyDirectory($sourcePath, $destinationPath);
+            } else {
+                copy($sourcePath, $destinationPath);
+            }
         }
+        closedir($dir);
+
     }
 
     protected function registerValidationRules()
