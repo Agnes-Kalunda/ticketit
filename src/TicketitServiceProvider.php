@@ -28,13 +28,22 @@ use Ticket\Ticketit\Console\Commands\SeedTicketit;
 
 class TicketitServiceProvider extends ServiceProvider
 {
-    protected $publishGroups = [];
+    /**
+     * Package specific publish groups
+     */
+    protected $ticketitPublishGroups = [];
 
+    /**
+     * Console commands
+     */
     protected $commands = [
         SeedTicketit::class,
         TicketDebugCommand::class
     ];
 
+    /**
+     * Register the application services.
+     */
     public function register()
     {
         // Register package config first
@@ -45,7 +54,7 @@ class TicketitServiceProvider extends ServiceProvider
         // Register Dependencies
         $this->registerDependencies();
 
-        // Register Commands 
+        // Register Commands - Make sure they're registered even if tables don't exist
         if ($this->app->runningInConsole()) {
             $this->commands([
                 SeedTicketit::class,
@@ -57,44 +66,9 @@ class TicketitServiceProvider extends ServiceProvider
         $this->registerFormMacros();
     }
 
-    protected function handleInstallationRoutes()
-{
-    try {
-        Log::info('Setting up installation routes');
-
-        Route::group([
-            'middleware' => 'web',
-            'namespace' => 'Ticket\Ticketit\Controllers'
-        ], function () {
-            Route::get('/tickets-install', [
-                'as' => 'tickets.install.index',
-                'uses' => 'InstallController@index'
-            ]);
-
-            Route::post('/tickets-install', [
-                'as' => 'tickets.install.setup',
-                'uses' => 'InstallController@setup'
-            ]);
-
-            Route::get('/tickets-upgrade', [
-                'as' => 'tickets.install.upgrade',
-                'uses' => 'InstallController@upgrade'
-            ]);
-
-            Route::get('/tickets', function () {
-                return redirect()->route('tickets.install.index');
-            });
-        });
-
-        Log::info('Installation routes registered successfully');
-        
-    } catch (\Exception $e) {
-        Log::error('Error setting up installation routes: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
-        ]);
-    }
-}
-
+    /**
+     * Bootstrap the application services.
+     */
     public function boot()
     {
         try {
@@ -108,13 +82,13 @@ class TicketitServiceProvider extends ServiceProvider
             $this->registerMiddleware();
             $this->registerValidationRules();
 
-            // database setup
+            // Handle database setup
             if (!$this->checkDatabase()) {
                 $this->handleInstallationRoutes();
                 return;
             }
 
-            
+            // Setup full package
             $this->setupPackage();
 
         } catch (\Exception $e) {
@@ -129,7 +103,7 @@ class TicketitServiceProvider extends ServiceProvider
     {
         $viewsDirectory = __DIR__.'/Views/bootstrap3';
 
-        $this->publishGroups = [
+        $this->ticketitPublishGroups = [
             'ticketit-config' => [
                 __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
             ],
@@ -147,13 +121,21 @@ class TicketitServiceProvider extends ServiceProvider
             ],
         ];
 
-        // Log publish setup
         Log::info('Publishing groups set up', [
-            'groups' => array_keys($this->publishGroups)
+            'groups' => array_keys($this->ticketitPublishGroups)
         ]);
 
-        // Publish all assets
-        $this->publishAssets($viewsDirectory);
+        // Publish each group individually
+        foreach ($this->ticketitPublishGroups as $tag => $paths) {
+            $this->publishes($paths, $tag);
+        }
+
+        // Publish all assets together
+        $allPaths = [];
+        foreach ($this->ticketitPublishGroups as $paths) {
+            $allPaths = array_merge($allPaths, $paths);
+        }
+        $this->publishes($allPaths, 'ticketit-assets');
     }
 
     protected function loadCoreComponents()
@@ -180,6 +162,8 @@ class TicketitServiceProvider extends ServiceProvider
         $loader = \Illuminate\Foundation\AliasLoader::getInstance();
         $loader->alias('Form', \Collective\Html\FormFacade::class);
     }
+
+    
 
     protected function registerFormMacros()
     {
@@ -412,15 +396,14 @@ class TicketitServiceProvider extends ServiceProvider
         try {
             Log::info('Publishing assets', [
                 'source_directory' => $viewsDirectory,
-                'publish_groups' => array_keys($this->publishGroups)
+                'publish_groups' => array_keys($this->ticketitPublishGroups)
             ]);
 
-            foreach ($this->publishGroups as $tag => $paths) {
+            // Publish each group
+            foreach ($this->ticketitPublishGroups as $tag => $paths) {
                 $this->publishes($paths, $tag);
-            }
-
-            // Verify published paths
-            foreach ($this->publishGroups as $tag => $paths) {
+                
+                // Verify published paths
                 foreach ($paths as $source => $destination) {
                     if (!file_exists($destination)) {
                         Log::warning("Destination path does not exist after publishing: {$destination}");
@@ -462,4 +445,41 @@ class TicketitServiceProvider extends ServiceProvider
                 'admin_route_path' => 'tickets-admin'
             ];
         }
-    }}
+    }
+
+    protected function handleInstallationRoutes()
+    {
+        try {
+            Route::group([
+                'middleware' => 'web',
+                'namespace' => 'Ticket\Ticketit\Controllers'
+            ], function () {
+                Route::get('/tickets-install', [
+                    'as' => 'tickets.install.index',
+                    'uses' => 'InstallController@index'
+                ]);
+
+                Route::post('/tickets-install', [
+                    'as' => 'tickets.install.setup',
+                    'uses' => 'InstallController@setup'
+                ]);
+
+                Route::get('/tickets-upgrade', [
+                    'as' => 'tickets.install.upgrade',
+                    'uses' => 'InstallController@upgrade'
+                ]);
+
+                Route::get('/tickets', function () {
+                    return redirect()->route('tickets.install.index');
+                });
+            });
+
+            Log::info('Installation routes registered successfully');
+            
+        } catch (\Exception $e) {
+            Log::error('Error setting up installation routes: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    }
+}
