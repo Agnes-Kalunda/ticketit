@@ -7,9 +7,7 @@
         'customer' => auth()->guard('customer')->check() ? [
             'id' => auth()->guard('customer')->id(),
             'name' => auth()->guard('customer')->user()->name
-        ] : 'not authenticated',
-        'categories_count' => isset($categories) ? count($categories) : 0,
-        'priorities_count' => isset($priorities) ? count($priorities) : 0
+        ] : 'not authenticated'
     ]);
 @endphp
 
@@ -41,15 +39,15 @@
 
                     <form method="POST" action="{{ route('customer.tickets.store') }}" id="ticketForm">
                         @csrf
-                        <input type="hidden" name="debug_token" value="{{ uniqid('ticket_') }}">
-
-                        <div class="form-group row">
+                        
+                        <div class="form-group row mb-3">
                             <label for="subject" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.subject') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
                                 <input type="text" 
                                        class="form-control @error('subject') is-invalid @enderror" 
+                                       id="subject"
                                        name="subject" 
                                        value="{{ old('subject') }}" 
                                        required>
@@ -61,18 +59,31 @@
                             </div>
                         </div>
 
-                        <div class="form-group row">
+                        <div class="form-group row mb-3">
                             <label for="category_name" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.category') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
                                 <select name="category_name" 
+                                        id="category_name"
                                         class="form-control @error('category_name') is-invalid @enderror" 
                                         required>
                                     <option value="">Select Category</option>
-                                    <option value="Technical" style="color: #0014f4" {{ old('category_name') == 'Technical' ? 'selected' : '' }}>Technical</option>
-                                    <option value="Billing" style="color: #2b9900" {{ old('category_name') == 'Billing' ? 'selected' : '' }}>Billing</option>
-                                    <option value="Customer Service" style="color: #7e0099" {{ old('category_name') == 'Customer Service' ? 'selected' : '' }}>Customer Service</option>
+                                    <option value="Technical" 
+                                            style="color: #0014f4" 
+                                            {{ old('category_name') == 'Technical' ? 'selected' : '' }}>
+                                        Technical Support
+                                    </option>
+                                    <option value="Billing" 
+                                            style="color: #2b9900" 
+                                            {{ old('category_name') == 'Billing' ? 'selected' : '' }}>
+                                        Billing
+                                    </option>
+                                    <option value="Customer Service" 
+                                            style="color: #7e0099" 
+                                            {{ old('category_name') == 'Customer Service' ? 'selected' : '' }}>
+                                        Customer Service
+                                    </option>
                                 </select>
                                 @error('category_name')
                                     <span class="invalid-feedback" role="alert">
@@ -82,18 +93,31 @@
                             </div>
                         </div>
 
-                        <div class="form-group row">
+                        <div class="form-group row mb-3">
                             <label for="priority_name" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.priority') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
                                 <select name="priority_name" 
+                                        id="priority_name"
                                         class="form-control @error('priority_name') is-invalid @enderror" 
                                         required>
                                     <option value="">Select Priority</option>
-                                    <option value="Low" style="color: #069900" {{ old('priority_name') == 'Low' ? 'selected' : '' }}>Low</option>
-                                    <option value="Medium" style="color: #e1d200" {{ old('priority_name') == 'Medium' ? 'selected' : '' }}>Medium</option>
-                                    <option value="High" style="color: #e10000" {{ old('priority_name') == 'High' ? 'selected' : '' }}>High</option>
+                                    <option value="Low" 
+                                            style="color: #069900" 
+                                            {{ old('priority_name') == 'Low' ? 'selected' : '' }}>
+                                        Low
+                                    </option>
+                                    <option value="Medium" 
+                                            style="color: #e1d200" 
+                                            {{ old('priority_name') == 'Medium' ? 'selected' : '' }}>
+                                        Medium
+                                    </option>
+                                    <option value="High" 
+                                            style="color: #e10000" 
+                                            {{ old('priority_name') == 'High' ? 'selected' : '' }}>
+                                        High
+                                    </option>
                                 </select>
                                 @error('priority_name')
                                     <span class="invalid-feedback" role="alert">
@@ -103,12 +127,13 @@
                             </div>
                         </div>
 
-                        <div class="form-group row">
+                        <div class="form-group row mb-3">
                             <label for="content" class="col-md-3 col-form-label text-md-right">
                                 {{ trans('ticketit::lang.message') }}{{ trans('ticketit::lang.colon') }}
                             </label>
                             <div class="col-md-8">
                                 <textarea class="form-control @error('content') is-invalid @enderror" 
+                                          id="content"
                                           name="content" 
                                           rows="5" 
                                           required>{{ old('content') }}</textarea>
@@ -140,7 +165,14 @@
 @push('scripts')
 <script>
 document.getElementById('ticketForm').addEventListener('submit', function(e) {
-    console.log('Form submitted');
+    // Log form data before submission
+    const formData = new FormData(this);
+    const formDataObj = {};
+    formData.forEach((value, key) => formDataObj[key] = value);
+    
+    console.log('Submitting form with data:', formDataObj);
+    
+    // Disable submit button to prevent double submission
     var submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
     submitBtn.innerHTML = 'Submitting...';
@@ -152,6 +184,7 @@ document.getElementById('ticketForm').addEventListener('submit', function(e) {
 <style>
 .card {
     margin-bottom: 1rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
 }
 .form-control:focus {
     border-color: #80bdff;
@@ -163,6 +196,12 @@ document.getElementById('ticketForm').addEventListener('submit', function(e) {
 .btn-submit:disabled {
     cursor: not-allowed;
     opacity: 0.65;
+}
+.form-group {
+    margin-bottom: 1rem;
+}
+select.form-control option {
+    padding: 0.5rem;
 }
 </style>
 @endsection
