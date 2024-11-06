@@ -52,24 +52,52 @@ class TicketitServiceProvider extends ServiceProvider
     }
 
     public function boot()
-    {
-        try {
-            $viewsDirectory = __DIR__.'/Views/bootstrap3';
-            $this->loadViewsFrom($viewsDirectory, 'ticketit');
-            $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
-            $this->loadMigrationsFrom(__DIR__.'/Migrations');
-            $this->registerMiddleware();
-            $this->registerValidationRules();
-            $this->publishAssets($viewsDirectory);
-            $this->setupDatabase();
+{
+    try {
+        // Load basic requirements first
+        $viewsDirectory = __DIR__.'/Views/bootstrap3';
+        $this->loadViewsFrom($viewsDirectory, 'ticketit');
+        $this->loadTranslationsFrom(__DIR__.'/Translations', 'ticketit');
+        
+        // Load migrations before anything else
+        $this->loadMigrationsFrom(__DIR__.'/Migrations');
 
-        } catch (\Exception $e) {
-            Log::error('TicketitServiceProvider boot error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString()
-            ]);
-            $this->handleInstallationRoutes();
+        // Check if we're running migrations
+        if ($this->app->runningInConsole()) {
+            return;
         }
+
+        
+        $this->registerMiddleware();
+        $this->registerValidationRules();
+        $this->publishAssets($viewsDirectory);
+
+        // Check database tables
+        if (!Schema::hasTable('migrations')) {
+            Log::info('Migrations table not found. Need to run migrations.');
+            return;
+        }
+
+        if (!Schema::hasTable('ticketit_settings')) {
+            Log::info('Ticketit tables not found. Need to run package migrations.');
+            $this->handleInstallationRoutes();
+            return;
+        }
+
+        $this->setupPackage();
+
+    } catch (\Exception $e) {
+        Log::error('TicketitServiceProvider boot error: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        if ($this->app->runningInConsole()) {
+            return;
+        }
+        
+        $this->handleInstallationRoutes();
     }
+}
 
     protected function setupDatabase()
     {
