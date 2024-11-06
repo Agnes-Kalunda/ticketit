@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\View;
 use Carbon\Carbon;
 use Collective\Html\FormFacade as Form;
 use Ticket\Ticketit\Console\Htmlify;
@@ -24,7 +27,8 @@ use Ticket\Ticketit\ViewComposers\TicketItComposer;
 class TicketitServiceProvider extends ServiceProvider
 {
     protected $commands = [
-        'Ticket\Ticketit\Console\Commands\SeedTicketit'
+        'Ticket\Ticketit\Console\Commands\SeedTicketit',
+        'Ticket\Ticketit\Console\Commands\TicketDebugCommand'
     ];
 
     /**
@@ -110,7 +114,28 @@ class TicketitServiceProvider extends ServiceProvider
     {
         $router = $this->app['router'];
         
-        // Register Custom Middleware
+        // Debug middleware
+        $router->aliasMiddleware('ticketit.debug', function(Request $request, \Closure $next) {
+            Log::info('Ticketit Request:', [
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'input' => $request->all(),
+                'headers' => $request->headers->all(),
+                'session' => $request->hasSession() ? [
+                    'has_token' => $request->session()->has('_token'),
+                    'token' => $request->session()->token(),
+                ] : 'no session',
+                'auth' => [
+                    'customer_check' => Auth::guard('customer')->check(),
+                    'customer_id' => Auth::guard('customer')->id(),
+                    'web_check' => Auth::guard('web')->check(),
+                    'web_id' => Auth::guard('web')->id()
+                ]
+            ]);
+            return $next($request);
+        });
+
+        // Register other middleware
         $router->aliasMiddleware('ticketit.customer', 
             \Ticket\Ticketit\Middleware\CustomerAuthMiddleware::class);
         
@@ -123,6 +148,8 @@ class TicketitServiceProvider extends ServiceProvider
         $router->aliasMiddleware('ticketit.agent', 
             \Ticket\Ticketit\Middleware\AgentAuthMiddleware::class);
     }
+
+
 
     protected function checkDatabase()
     {
@@ -199,45 +226,68 @@ class TicketitServiceProvider extends ServiceProvider
 
     protected function loadRoutes()
     {
-        $settings = $this->getRouteSettings();
+        try {
+            Log::info('About to register Ticketit routes', [
+                'existing_routes' => Route::getRoutes()->count()
+            ]);
 
-        // Customer Routes
-        Route::group([
-            'middleware' => ['web', 'ticketit.customer'],
-            'prefix' => 'customer/tickets',
-            'as' => 'customer.tickets.',
-            'namespace' => 'Ticket\Ticketit\Controllers'
-        ], function () {
-            Route::get('/', 'TicketsController@index')->name('index');
-            Route::get('/create', 'TicketsController@create')->name('create');
-            Route::post('/', 'TicketsController@store')->name('store');
-            Route::get('/{ticket}', 'TicketsController@show')->name('show');
-        });
+            $settings = $this->getRouteSettings();
 
-        // Staff Routes
-        Route::group([
-            'middleware' => ['web', 'ticketit.staff'],
-            'prefix' => 'staff/tickets',
-            'as' => 'staff.tickets.',
-            'namespace' => 'Ticket\Ticketit\Controllers'
-        ], function () {
-            Route::get('/', 'TicketsController@staffIndex')->name('index');
-            Route::get('/{ticket}', 'TicketsController@staffShow')->name('show');
-            Route::post('/{ticket}/status', 'TicketsController@updateStatus')->name('status.update');
-        });
+            // Customer Routes with debug middleware
+            Route::group([
+                'middleware' => ['web', 'ticketit.customer', 'ticketit.debug'],
+                'prefix' => 'customer/tickets',
+                'as' => 'customer.tickets.',
+                'namespace' => 'Ticket\Ticketit\Controllers'
+            ], function () {
+                Route::get('/', 'TicketsController@index')->name('index');
+                Route::get('/create', 'TicketsController@create')->name('create');
+                
+                // Store route with extra debugging
+                Route::post('/', function(Request $request) {
+                    Log::info('Store route hit:', [
+                        'request' => [
+                            'method' => $request->method(),
+                            'data' => $request->all(),
+                            'headers' => $request->headers->all(),
+                            'ip' => $request->ip(),
+                            'ajax' => $request->ajax(),
+                        ],
+                        'auth' => [
+                            'guard' => Auth::guard('customer')->getName(),
+                            'check' => Auth::guard('customer')->check(),
+                            'id' => Auth::guard('customer')->id()
+                        ]
+                    ]);
+                    
+                    return app()->call('Ticket\Ticketit\Controllers\TicketsController@store');
+                })->name('store');
+                
+                Route::get('/{ticket}', 'TicketsController@show')->name('show');
+            });
 
-        // Admin Routes
-        Route::group([
-            'middleware' => ['web', 'ticketit.admin'],
-            'prefix' => $settings['admin_route_path'],
-            'as' => 'admin.',
-            'namespace' => 'Ticket\Ticketit\Controllers'
-        ], function () {
-            Route::resource('status', 'StatusesController');
-            Route::resource('priority', 'PrioritiesController');
-            Route::resource('category', 'CategoriesController');
-        });
+           
+
+            Log::info('Ticketit routes registered successfully', [
+                'total_routes' => Route::getRoutes()->count(),
+                'routes' => collect(Route::getRoutes())->map(function($route) {
+                    return [
+                        'uri' => $route->uri(),
+                        'name' => $route->getName(),
+                        'methods' => $route->methods()
+                    ];
+                })->toArray()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error registering routes:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
+
 
     protected function getRouteSettings()
     {
@@ -251,13 +301,47 @@ class TicketitServiceProvider extends ServiceProvider
 
     protected function setupViewComposers()
     {
-        view()->composer('*', function ($view) {
-            $settings = Cache::remember('ticketit_settings', 60, function () {
-                return Setting::all();
-            });
-            $view->with('setting', $settings);
+        view()->composer('ticketit::*', function ($view) {
+            try {
+                
+                $debug = [
+                    'route' => Route::currentRouteName(), 
+                    'middleware' => request()->route() ? request()->route()->middleware() : [],
+                    'guard' => Auth::guard('customer')->getName(),
+                    'authenticated' => Auth::guard('customer')->check(),
+                    'user_id' => Auth::guard('customer')->id(),
+                    'timestamp' => now()->toDateTimeString(),
+                    'request_method' => request()->method(),
+                    'request_path' => request()->path()
+                ];
+                
+                Log::info('View composer debug info:', $debug);
+                
+                $view->with('debug', $debug);
+                
+                // Add settings
+                $settings = Cache::remember('ticketit_settings', 60, function () {
+                    return Setting::all();
+                });
+                $view->with('setting', $settings);
+
+            } catch (\Exception $e) {
+                Log::error('Error in view composer:', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                
+                // Provide fallback debug info
+                $view->with('debug', [
+                    'error' => 'Debug info unavailable',
+                    'timestamp' => now()->toDateTimeString()
+                ]);
+                
+                $view->with('setting', collect([]));
+            }
         });
     }
+
 
     protected function publishAssets($viewsDirectory)
     {

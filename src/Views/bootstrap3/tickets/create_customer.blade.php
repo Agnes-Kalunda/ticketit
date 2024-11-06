@@ -1,107 +1,99 @@
-@extends('layouts.app')
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('ticketForm');
+    if (form) {
+        // Log initial form state
+        console.log('Form found:', {
+            action: form.action,
+            method: form.method,
+            id: form.id,
+            exists: !!form
+        });
 
-@section('content')
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    {{ trans('ticketit::lang.create-new-ticket') }}
-                </div>
+        form.addEventListener('submit', function(e) {
+             e.preventDefault(); 
+            
+            // Collect all form data
+            const formData = new FormData(this);
+            const data = {};
+            formData.forEach((value, key) => data[key] = value);
+            
+            // Log submission details
+            console.log('Form submission details:', {
+                timestamp: new Date().toISOString(),
+                url: window.location.href,
+                action: this.action,
+                method: this.method,
+                formData: data,
+                auth: {
+                    csrfToken: document.querySelector('meta[name="csrf-token"]')?.content,
+                    formToken: formData.get('_token')
+                }
+            });
 
-                <div class="card-body">
-                    <form method="POST" action="{{ route('customer.tickets.store') }}">
-                        @csrf
-                        <div class="form-group row">
-                            <label for="subject" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.subject') }}{{ trans('ticketit::lang.colon') }}
-                            </label>
-                            <div class="col-md-8">
-                                <input type="text" 
-                                       class="form-control @error('subject') is-invalid @enderror" 
-                                       name="subject" 
-                                       value="{{ old('subject') }}" 
-                                       required>
-                                @error('subject')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
+            // Check CSRF token
+            const metaToken = document.querySelector('meta[name="csrf-token"]')?.content;
+            const formToken = formData.get('_token');
+            
+            if (metaToken !== formToken) {
+                console.error('CSRF token mismatch:', {
+                    metaToken: metaToken,
+                    formToken: formToken
+                });
+            }
 
-                        <div class="form-group row">
-                            <label for="category_name" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.category') }}{{ trans('ticketit::lang.colon') }}
-                            </label>
-                            <div class="col-md-8">
-                                <select name="category_name" 
-                                        class="form-control @error('category_name') is-invalid @enderror" 
-                                        required>
-                                    <option value="">Select Category</option>
-                                    <option value="Technical" style="color: #0014f4" {{ old('category_name') == 'Technical' ? 'selected' : '' }}>Technical</option>
-                                    <option value="Billing" style="color: #2b9900" {{ old('category_name') == 'Billing' ? 'selected' : '' }}>Billing</option>
-                                    <option value="Customer Service" style="color: #7e0099" {{ old('category_name') == 'Customer Service' ? 'selected' : '' }}>Customer Service</option>
-                                </select>
-                                @error('category_name')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label for="priority_name" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.priority') }}{{ trans('ticketit::lang.colon') }}
-                            </label>
-                            <div class="col-md-8">
-                                <select name="priority_name" 
-                                        class="form-control @error('priority_name') is-invalid @enderror" 
-                                        required>
-                                    <option value="">Select Priority</option>
-                                    <option value="Low" style="color: #069900" {{ old('priority_name') == 'Low' ? 'selected' : '' }}>Low</option>
-                                    <option value="Medium" style="color: #e1d200" {{ old('priority_name') == 'Medium' ? 'selected' : '' }}>Medium</option>
-                                    <option value="High" style="color: #e10000" {{ old('priority_name') == 'High' ? 'selected' : '' }}>High</option>
-                                </select>
-                                @error('priority_name')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
+            // Log headers
+            const headers = {};
+            document.querySelectorAll('meta').forEach(meta => {
+                if (meta.name) {
+                    headers[meta.name] = meta.content;
+                }
+            });
+            console.log('Available headers:', headers);
 
-                        <div class="form-group row">
-                            <label for="content" class="col-md-3 col-form-label text-md-right">
-                                {{ trans('ticketit::lang.message') }}{{ trans('ticketit::lang.colon') }}
-                            </label>
-                            <div class="col-md-8">
-                                <textarea class="form-control @error('content') is-invalid @enderror" 
-                                          name="content" 
-                                          rows="5" 
-                                          required>{{ old('content') }}</textarea>
-                                @error('content')
-                                    <span class="invalid-feedback" role="alert">
-                                        <strong>{{ $message }}</strong>
-                                    </span>
-                                @enderror
-                            </div>
-                        </div>
+            // Log button state
+            const submitBtn = document.getElementById('submitBtn');
+            if (submitBtn) {
+                console.log('Submit button state:', {
+                    disabled: submitBtn.disabled,
+                    text: submitBtn.innerText,
+                    type: submitBtn.type
+                });
+            }
+        });
 
-                        <div class="form-group row mb-0">
-                            <div class="col-md-8 offset-md-3">
-                                <button type="submit" class="btn btn-primary">
-                                    {{ trans('ticketit::lang.btn-submit') }}
-                                </button>
-                                <a href="{{ route('customer.dashboard') }}" class="btn btn-link">
-                                    {{ trans('ticketit::lang.btn-cancel') }}
-                                </a>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-@endsection
+        // Monitor input changes
+        form.querySelectorAll('input, select, textarea').forEach(element => {
+            element.addEventListener('change', function(e) {
+                console.log('Form field changed:', {
+                    name: this.name,
+                    value: this.value,
+                    type: this.type,
+                    valid: this.checkValidity()
+                });
+            });
+        });
+    } else {
+        console.error('Ticket form not found! Check form ID');
+    }
+});
+</script>
+@endpush
+
+@push('styles')
+<style>
+.form-debug {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: #f8f9fa;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 9999;
+    display: none;
+}
+</style>
+@endpush
