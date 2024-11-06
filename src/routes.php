@@ -22,29 +22,26 @@ $admin_route_path = $settings['admin_route_path'];
 // Customer Routes
 Route::group([
     'middleware' => ['web', 'auth:customer'],
-    'prefix' => 'customer/tickets'
+    'prefix' => 'customer/tickets',
+    'as' => 'customer.tickets.',
+    'namespace' => 'Ticket\Ticketit\Controllers'
 ], function () {
-    Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@index')
-        ->name('customer.tickets.index');
-    Route::get('/create', 'Ticket\Ticketit\Controllers\TicketsController@create')
-        ->name('customer.tickets.create');
-    Route::post('/', 'Ticket\Ticketit\Controllers\TicketsController@store')
-        ->name('customer.tickets.store');
-    Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@show')
-        ->name('customer.tickets.show');
+    Route::get('/', 'TicketsController@index')->name('index');
+    Route::get('/create', 'TicketsController@create')->name('create');
+    Route::post('/', 'TicketsController@store')->name('store');
+    Route::get('/{ticket}', 'TicketsController@show')->name('show');
 });
 
-// Staff Routes
+// Staff Ticket Routes 
 Route::group([
-    'middleware' => ['web', 'auth'],
-    'prefix' => 'staff/tickets'
+    'middleware' => ['web', 'auth:web'],
+    'prefix' => 'staff/tickets',
+    'as' => 'staff.tickets.',
+    'namespace' => 'Ticket\Ticketit\Controllers'
 ], function () {
-    Route::get('/', 'Ticket\Ticketit\Controllers\TicketsController@staffIndex')
-        ->name('staff.tickets.index');
-    Route::get('/{ticket}', 'Ticket\Ticketit\Controllers\TicketsController@staffShow')
-        ->name('staff.tickets.show');
-    Route::post('/{ticket}/status', 'Ticket\Ticketit\Controllers\TicketsController@updateStatus')
-        ->name('staff.tickets.status.update');
+    Route::get('/', 'TicketsController@staffIndex')->name('index');
+    Route::get('/{ticket}', 'TicketsController@staffShow')->name('show');
+    Route::post('/{ticket}/status', 'TicketsController@updateStatus')->name('status.update');
 });
 
 // Staff/Admin Extended Routes
