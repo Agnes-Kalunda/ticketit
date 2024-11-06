@@ -440,8 +440,8 @@ public function updateStatus(Request $request, $id)
 {
     try {
         if (!$this->isCustomer()) {
-            return redirect()->route(Setting::grab('main_route').'.index')
-                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-do-this'));
+            return redirect()->route('customer.tickets.index')
+                ->with('error', 'You are not permitted to create tickets.');
         }
 
         $validator = Validator::make($request->all(), [
@@ -454,20 +454,18 @@ public function updateStatus(Request $request, $id)
         if ($validator->fails()) {
             return redirect()->back()
                 ->withErrors($validator)
-                ->withInput();
+                ->withInput()
+                ->with('error', 'Please fix the errors in your submission.');
         }
 
-        $connection = app('db')->connection();
-        $connection->beginTransaction();
-
         try {
-            // Get category
+            // Get or create category
             $category = Category::firstOrCreate(
                 ['name' => $request->category_name],
                 ['color' => $this->getCategoryColor($request->category_name)]
             );
 
-            // Get priority
+            // Get or create priority
             $priority = Priority::firstOrCreate(
                 ['name' => $request->priority_name],
                 ['color' => $this->getPriorityColor($request->priority_name)]
@@ -479,6 +477,7 @@ public function updateStatus(Request $request, $id)
                 ['color' => '#f39c12']
             );
 
+            // Create the ticket
             $ticket = new Ticket();
             $ticket->subject = $request->subject;
             $ticket->content = $request->content;
@@ -488,26 +487,35 @@ public function updateStatus(Request $request, $id)
             $ticket->customer_id = $this->getAuthUser()->id;
 
             if (!$ticket->save()) {
-                throw new \Exception('Failed to save ticket');
+                throw new \Exception('Failed to save ticket to database');
             }
 
-            $connection->commit();
+            
+            Log::info('Ticket created successfully', [
+                'ticket_id' => $ticket->id,
+                'customer_id' => $ticket->customer_id,
+                'category' => $request->category_name,
+                'priority' => $request->priority_name
+            ]);
 
             return redirect()->route('customer.tickets.index')
-                ->with('success', 'Ticket has been created successfully!');
+                ->with('success', "Ticket #{$ticket->id} has been created successfully! Our team will review it shortly.");
 
         } catch (\Exception $e) {
-            $connection->rollBack();
+            Log::error('Database error while creating ticket: ' . $e->getMessage(), [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         }
+
     } catch (\Exception $e) {
         Log::error('Ticket creation failed: ' . $e->getMessage());
         return redirect()->back()
-            ->with('error', 'Failed to create ticket: ' . $e->getMessage())
+            ->with('error', 'Unable to create ticket. Please try again or contact support if the problem persists.')
             ->withInput();
     }
-
-}  
+}
     protected function getCategoryColor($name)
     {
         $colors = [
@@ -519,14 +527,14 @@ public function updateStatus(Request $request, $id)
     }
 
     protected function getPriorityColor($name)
-{
-    $colors = [
-        'Low' => '#069900',
-        'Medium' => '#e1d200',
-        'High' => '#e10000'
-    ];
-    return $colors[$name] ?? '#000000';
-}
+    {
+        $colors = [
+            'Low' => '#069900',
+            'Medium' => '#e1d200',
+            'High' => '#e10000'
+        ];
+        return $colors[$name] ?? '#000000';
+    }
 
 
     public function index()
