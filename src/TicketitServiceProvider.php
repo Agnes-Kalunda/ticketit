@@ -100,43 +100,47 @@ class TicketitServiceProvider extends ServiceProvider
     }
 
     protected function setupPublishGroups()
-    {
-        $viewsDirectory = __DIR__.'/Views/bootstrap3';
+{
+    $viewsDirectory = __DIR__.'/Views/bootstrap3';
 
-        $this->ticketitPublishGroups = [
-            'ticketit-config' => [
-                __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
-            ],
-            'ticketit-migrations' => [
-                __DIR__.'/Migrations' => database_path('migrations'),
-            ],
-            'ticketit-views' => [
-                $viewsDirectory => resource_path('views/vendor/ticketit'),
-            ],
-            'ticketit-lang' => [
-                __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
-            ],
-            'ticketit-public' => [
-                __DIR__.'/Public' => public_path('vendor/ticketit'),
-            ],
-        ];
+    $this->ticketitPublishGroups = [
+        'ticketit-config' => [
+            __DIR__.'/Config/ticketit.php' => config_path('ticketit.php'),
+        ],
+        'ticketit-migrations' => [
+            __DIR__.'/Migrations' => database_path('migrations'),
+        ],
+        'ticketit-views' => [
+            $viewsDirectory => resource_path('views/vendor/ticketit'),
+        ],
+        'ticketit-lang' => [
+            __DIR__.'/Translations' => resource_path('lang/vendor/ticketit'),
+        ],
+        'ticketit-public' => [
+            __DIR__.'/Public' => public_path('vendor/ticketit'),
+        ],
+        'ticketit-routes' => [
+            __DIR__.'/routes.php' => base_path('routes/ticketit.php'),
+        ],
+    ];
 
-        Log::info('Publishing groups set up', [
-            'groups' => array_keys($this->ticketitPublishGroups)
-        ]);
+    Log::info('Publishing groups set up', [
+        'groups' => array_keys($this->ticketitPublishGroups)
+    ]);
 
-        // Publish each group individually
-        foreach ($this->ticketitPublishGroups as $tag => $paths) {
-            $this->publishes($paths, $tag);
-        }
-
-        // Publish all assets together
-        $allPaths = [];
-        foreach ($this->ticketitPublishGroups as $paths) {
-            $allPaths = array_merge($allPaths, $paths);
-        }
-        $this->publishes($allPaths, 'ticketit-assets');
+    // Publish each group individually
+    foreach ($this->ticketitPublishGroups as $tag => $paths) {
+        $this->publishes($paths, $tag);
     }
+
+    // Publish all assets together
+    $allPaths = [];
+    foreach ($this->ticketitPublishGroups as $paths) {
+        $allPaths = array_merge($allPaths, $paths);
+    }
+    $this->publishes($allPaths, 'ticketit-assets');
+}
+
 
     protected function loadCoreComponents()
     {
