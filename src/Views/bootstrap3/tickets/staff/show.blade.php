@@ -106,7 +106,7 @@
                     </div>
 
                     <!-- Agent Status Update Section -->
-                    @if($isAgent && ($ticket->agent_id === auth()->id() || $isAdmin))
+                    @if($isAgent && ($ticket->agent_id === auth()->id()))
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">Update Ticket Status</h6>
@@ -247,10 +247,7 @@ function confirmDelete(url) {
     transition: all 0.2s ease;
 }
 .comment:hover {
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.comment-content {
-    white-space: pre-wrap;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 </style>
 @endpush
