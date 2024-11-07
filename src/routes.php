@@ -62,10 +62,12 @@ Route::group([
 ], function () {
     // Ticket Management
     Route::get('/', 'TicketsController@staffIndex')->name('index');
-    Route::get('/{ticket}', 'TicketsController@staffShow')->name('show');
-    Route::post('/{ticket}/status', 'TicketsController@updateStatus')
+    Route::get('/{id}', 'TicketsController@staffShow')
+        ->name('show')
+        ->middleware('Ticket\Ticketit\Middleware\StaffAccessMiddleware');
+    Route::post('/{id}/status', 'TicketsController@updateStatus')
         ->name('status.update')
-        ->middleware('can:update-ticket-status');
+        ->middleware('Ticket\Ticketit\Middleware\IsAgentMiddleware');
 
     // Staff Comments
     Route::post('/{ticket}/comments', 'CommentsController@store')
@@ -79,9 +81,9 @@ Route::group([
         ->middleware('can:delete-ticket-comment');
 
     // Assignment (Admin Only)
-    Route::post('/{ticket}/assign', 'TicketsController@assignTicket')
+    Route::post('/{id}/assign', 'TicketsController@assignTicket')
         ->name('assign')
-        ->middleware('admin');
+        ->middleware('Ticket\Ticketit\Middleware\IsAdminMiddleware');
 });
 
 // Extended Staff/Admin Routes

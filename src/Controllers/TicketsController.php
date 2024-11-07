@@ -163,52 +163,54 @@ class TicketsController extends Controller
     public function staffShow($id)
 {
     try {
-        $user = Auth::user();
-        $ticket = $this->tickets->with(['status', 'priority', 'category', 'customer', 'agent', 'comments.user'])
-            ->findOrFail($id);
+        // Get the ticket with relationships
+        $ticket = $this->tickets->with([
+            'status', 
+            'priority', 
+            'category', 
+            'customer', 
+            'agent', 
+            'comments.user'
+        ])->findOrFail($id);
 
-        // Common view data
-        $viewData = [
-            'ticket' => $ticket,
-            'isAdmin' => $user->ticketit_admin,  
-            'isAgent' => $user->ticketit_agent
-        ];
-
-        // Add admin-specific data
-        if ($user->ticketit_admin) {
-            // Get available agents from your main app's User model
-            $agents = \App\User::where('ticketit_agent', true)
-                ->select('id', 'name', 'email')
-                ->withCount(['assignedTickets' => function($query) {
-                    $query->whereNull('completed_at');
-                }])
-                ->get();
-
-            $viewData['agents'] = $agents;
-            $viewData['statuses'] = Status::pluck('name', 'id');
-
-            Log::info('Admin View Data:', [
-                'agent_count' => $agents->count(),
-                'user_id' => $user->id,
-                'is_admin' => $user->ticketit_admin
+        // Check if admin
+        if ($this->agent->isAdmin()) {
+            // Get available agents using Agent model
+            $agents = $this->agent->agents()->get();
+            
+            return view('ticketit::tickets.staff.show', [
+                'ticket' => $ticket,
+                'isAdmin' => true,
+                'isAgent' => false,
+                'agents' => $agents,
+                'statuses' => Status::pluck('name', 'id')
             ]);
         }
 
-        // Add agent-specific data
-        if ($user->ticketit_agent) {
-            // Only add status options for assigned tickets
-            if ($ticket->agent_id === $user->id) {
-                $viewData['statuses'] = Status::pluck('name', 'id');
+        // Check if agent
+        if ($this->agent->isAgent(auth()->id())) {
+            // Check if ticket is assigned to this agent
+            if (!$this->agent->isAssignedAgent($id)) {
+                return redirect()->route('staff.tickets.index')
+                    ->with('error', 'You can only view tickets assigned to you');
             }
+
+            return view('ticketit::tickets.staff.show', [
+                'ticket' => $ticket,
+                'isAdmin' => false,
+                'isAgent' => true,
+                'statuses' => Status::pluck('name', 'id')
+            ]);
         }
 
-        return view('ticketit::tickets.staff.show', $viewData);
+        // Neither admin nor agent
+        return redirect()->route('staff.tickets.index')
+            ->with('error', 'Unauthorized access');
 
     } catch (\Exception $e) {
-        Log::error('Error in staffShow:', [
+        Log::error('Error showing ticket:', [
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString(),
-            'user_id' => $user->id ?? null,
             'ticket_id' => $id
         ]);
 
