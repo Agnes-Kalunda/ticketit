@@ -1,15 +1,18 @@
 <?php
+
 namespace Ticket\Ticketit\Middleware;
 
 use Closure;
-use Ticket\Ticketit\Models\Agent;
+use Illuminate\Http\Request;
 
 class StaffAccessMiddleware
 {
-    public function handle($request, Closure $next)
+    public function handle(Request $request, Closure $next)
     {
-        if (!Agent::isAdmin() && !Agent::isAgent(auth()->id())) {
-            return redirect()->route('staff.tickets.index')
+        $user = auth()->user();
+        
+        if (!$user || (!$user->ticketit_admin && !$user->ticketit_agent)) {
+            return redirect()->route('user.dashboard')
                 ->with('error', 'You do not have permission to access this area.');
         }
 
