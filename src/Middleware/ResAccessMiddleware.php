@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Ticket\Ticketit\Models\Setting;
 use Ticket\Ticketit\Models\Ticket;
 
-class ResAccessMiddleware
+class ResAccessMiddleware 
 {
     public function handle($request, Closure $next)
     {
@@ -32,7 +32,7 @@ class ResAccessMiddleware
         $ticketId = $this->getTicketId($request);
         if (!$ticketId) {
             Log::error('ResAccessMiddleware: No ticket ID found');
-            return $this->unauthorizedRedirect();
+            return $this->unauthorizedRedirect($user, $customer);
         }
 
         try {
@@ -62,7 +62,7 @@ class ResAccessMiddleware
                 'customer_id' => $customer ? $customer->id : null
             ]);
 
-            return $this->unauthorizedRedirect();
+            return $this->unauthorizedRedirect($user, $customer);
 
         } catch (\Exception $e) {
             Log::error('ResAccessMiddleware: Error checking access', [
@@ -70,28 +70,35 @@ class ResAccessMiddleware
                 'ticket_id' => $ticketId
             ]);
             
-            return $this->unauthorizedRedirect();
+            return $this->unauthorizedRedirect($user, $customer);
         }
     }
 
     protected function getTicketId($request)
     {
-        // Check show route
-        if ($request->route()->getName() == Setting::grab('main_route').'.show') {
-            return $request->route('ticket');
+        
+        $ticketId = $request->route('ticket') ?? $request->route('id');
+        if ($ticketId) {
+            return $ticketId;
         }
 
-        // Check comment route
-        if ($request->route()->getName() == Setting::grab('main_route').'-comment.store') {
-            return $request->get('ticket_id');
-        }
-
-        return null;
+        //check for ticket_id in request
+        return $request->get('ticket_id');
     }
 
-    protected function unauthorizedRedirect()
+    protected function unauthorizedRedirect($user, $customer)
     {
-        return redirect()->route(Setting::grab('main_route').'.index')
+        if ($customer) {
+            return redirect()->route('customer.tickets.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
+        }
+
+        if ($user) {
+            return redirect()->route('staff.tickets.index')
+                ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
+        }
+
+        return redirect()->route('login')
             ->with('warning', trans('ticketit::lang.you-are-not-permitted-to-access'));
     }
 }

@@ -7,20 +7,20 @@ use Ticket\Ticketit\Models\Setting;
 use Ticket\Ticketit\Helpers\LaravelVersion;
 use Illuminate\Support\Facades\Log;
 
-// Load settings with proper caching
-$settings = [
-    'main_route' => Setting::grab('main_route') ?: 'tickets',
-    'main_route_path' => Setting::grab('main_route_path') ?: 'tickets',
-    'admin_route' => Setting::grab('admin_route') ?: 'tickets-admin',
-    'admin_route_path' => Setting::grab('admin_route_path') ?: 'tickets-admin'
-];
-
-$main_route = $settings['main_route'];
-$main_route_path = $settings['main_route_path'];
-$admin_route = $settings['admin_route'];
-$admin_route_path = $settings['admin_route_path'];
-
 try {
+    // Load settings with proper caching
+    $settings = [
+        'main_route' => Setting::grab('main_route') ?: 'tickets',
+        'main_route_path' => Setting::grab('main_route_path') ?: 'tickets',
+        'admin_route' => Setting::grab('admin_route') ?: 'tickets-admin',
+        'admin_route_path' => Setting::grab('admin_route_path') ?: 'tickets-admin'
+    ];
+
+    $main_route = $settings['main_route'];
+    $main_route_path = $settings['main_route_path'];
+    $admin_route = $settings['admin_route'];
+    $admin_route_path = $settings['admin_route_path'];
+
     /*
     |--------------------------------------------------------------------------
     | Customer Routes
@@ -32,21 +32,26 @@ try {
         'as' => 'customer.tickets.',
         'namespace' => 'Ticket\Ticketit\Controllers'
     ], function () {
-        // Ticket Management
+        // Basic Ticket Operations
         Route::get('/', 'TicketsController@index')->name('index');
         Route::get('/create', 'TicketsController@create')->name('create');
         Route::post('/', 'TicketsController@store')->name('store');
-        Route::get('/{ticket}', 'TicketsController@show')->name('show');
+        Route::get('/{ticket}', 'TicketsController@show')->name('show')
+            ->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware');
 
         // Customer Comments
         Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
         Route::put('/comments/{comment}', 'CommentsController@update')->name('comments.update');
         Route::delete('/comments/{comment}', 'CommentsController@destroy')->name('comments.delete');
+
+        // Customer Profile & Settings
+        Route::get('/profile', 'CustomersController@profile')->name('profile');
+        Route::put('/profile', 'CustomersController@updateProfile')->name('profile.update');
     });
 
     /*
     |--------------------------------------------------------------------------
-    | Staff Routes
+    | Staff & Agent Routes
     |--------------------------------------------------------------------------
     */
     Route::group([
@@ -54,53 +59,50 @@ try {
         'prefix' => 'staff/tickets',
         'as' => 'staff.tickets.',
         'namespace' => 'Ticket\Ticketit\Controllers'
-    ], function () {
-        // Base Staff Routes (accessible by all staff)
+    ], function () use ($main_route) {
+        // Basic Staff Routes
         Route::middleware('Ticket\Ticketit\Middleware\StaffAuthMiddleware')->group(function() {
             Route::get('/', 'TicketsController@staffIndex')->name('index');
             Route::get('/dashboard', 'DashboardController@staffDashboard')->name('dashboard');
             Route::get('/{id}', 'TicketsController@staffShow')->name('show');
         });
 
-        // Agent Only Routes
-        Route::middleware('Ticket\Ticketit\Middleware\AgentAuthMiddleware')->group(function() {
+        // Agent Routes
+        Route::middleware([
+            'Ticket\Ticketit\Middleware\AgentAuthMiddleware',
+            'Ticket\Ticketit\Middleware\ResAccessMiddleware'
+        ])->group(function() {
             // Ticket Management
             Route::get('/{id}/view', 'TicketsController@agentShow')->name('agent.show');
             Route::post('/{id}/status', 'TicketsController@updateStatus')->name('status.update');
-            
-            // Comments/Replies
+            Route::post('/{id}/assign', 'TicketsController@assignSelf')->name('agent.assign');
+            Route::post('/{id}/complete', 'TicketsController@complete')->name('agent.complete');
+            Route::post('/{id}/reopen', 'TicketsController@reopen')->name('agent.reopen');
+
+            // Comments
             Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
             Route::put('/comments/{comment}', 'CommentsController@update')->name('comments.update');
             Route::delete('/comments/{comment}', 'CommentsController@destroy')->name('comments.delete');
 
             // Agent Tools
-            Route::get('/tools/categories', 'CategoriesController@index')->name('categories.index');
-            Route::get('/tools/priorities', 'PrioritiesController@index')->name('priorities.index');
+            Route::get('/tools/categories', 'CategoriesController@agentIndex')->name('agent.categories');
+            Route::get('/tools/priorities', 'PrioritiesController@agentIndex')->name('agent.priorities');
+            Route::get('/tools/statuses', 'StatusesController@agentIndex')->name('agent.statuses');
         });
 
         // Admin Only Routes
         Route::middleware('Ticket\Ticketit\Middleware\AdminAuthMiddleware')->group(function() {
-            // Ticket Administration
-            Route::post('/{id}/assign', 'TicketsController@assignTicket')->name('admin.assign');
+            Route::post('/{id}/assign-agent', 'TicketsController@assignTicket')->name('admin.assign');
+            Route::post('/{id}/transfer', 'TicketsController@transferTicket')->name('admin.transfer');
             Route::delete('/{id}', 'TicketsController@destroy')->name('admin.destroy');
+        });
 
-            // User Management
-            Route::prefix('management')->group(function() {
-                // Agents Management
-                Route::get('/agents', 'AgentsController@index')->name('admin.agents.index');
-                Route::post('/agents', 'AgentsController@store')->name('admin.agents.store');
-                Route::put('/agents/{id}', 'AgentsController@update')->name('admin.agents.update');
-                Route::delete('/agents/{id}', 'AgentsController@destroy')->name('admin.agents.destroy');
-
-                // Categories Management
-                Route::resource('categories', 'CategoriesController')->except(['show']);
-                
-                // Priorities Management
-                Route::resource('priorities', 'PrioritiesController')->except(['show']);
-                
-                // Statuses Management
-                Route::resource('statuses', 'StatusesController')->except(['show']);
-            });
+        // Legacy/Compatibility Routes
+        Route::middleware('Ticket\Ticketit\Middleware\StaffAuthMiddleware')->group(function() use ($main_route) {
+            Route::get('/complete', 'TicketsController@indexComplete')->name("$main_route.complete");
+            Route::get('/data/{id?}', 'TicketsController@data')->name("$main_route.data");
+            Route::get('/agents/list/{category_id?}/{ticket_id?}', 'TicketsController@agentSelectList')
+                ->name('agentselectlist');
         });
     });
 
@@ -110,23 +112,39 @@ try {
     |--------------------------------------------------------------------------
     */
     Route::group([
-        'middleware' => ['web', 'auth', 'Ticket\Ticketit\Middleware\AdminAuthMiddleware'],
+        'middleware' => ['web', 'auth:web', 'Ticket\Ticketit\Middleware\AdminAuthMiddleware'],
         'prefix' => $admin_route_path,
         'as' => "$admin_route.",
         'namespace' => 'Ticket\Ticketit\Controllers'
     ], function () {
-        // Dashboard
+        // Dashboard & Reports
         Route::get('/', 'DashboardController@index')->name('dashboard');
         Route::get('/indicator/{period?}', 'DashboardController@indicator')->name('dashboard.indicator');
-
-        // Settings
-        Route::get('/settings', 'SettingsController@index')->name('settings.index');
-        Route::post('/settings', 'SettingsController@update')->name('settings.update');
-
-        // Reports
         Route::get('/reports', 'ReportsController@index')->name('reports.index');
         Route::get('/reports/generate', 'ReportsController@generate')->name('reports.generate');
         Route::get('/reports/export', 'ReportsController@export')->name('reports.export');
+
+        // Settings & Configuration
+        Route::get('/settings', 'SettingsController@index')->name('settings.index');
+        Route::post('/settings', 'SettingsController@update')->name('settings.update');
+        Route::get('/settings/email', 'SettingsController@emailConfig')->name('settings.email');
+        Route::post('/settings/email', 'SettingsController@updateEmailConfig')->name('settings.email.update');
+
+        // User Management
+        Route::resource('agents', 'AgentsController');
+        Route::resource('administrators', 'AdministratorsController');
+        Route::get('/users/inactive', 'UsersController@inactive')->name('users.inactive');
+        Route::post('/users/{id}/activate', 'UsersController@activate')->name('users.activate');
+        Route::post('/users/{id}/deactivate', 'UsersController@deactivate')->name('users.deactivate');
+
+        // Ticket Configuration
+        Route::resource('statuses', 'StatusesController');
+        Route::resource('priorities', 'PrioritiesController');
+        Route::resource('categories', 'CategoriesController');
+
+        // Audit & Logs
+        Route::get('/audits', 'AuditsController@index')->name('audits.index');
+        Route::get('/activity-logs', 'ActivityLogsController@index')->name('activity-logs.index');
     });
 
     /*
@@ -157,8 +175,25 @@ try {
         });
     }
 
-    // Log successful route registration
-    Log::info('Ticket routes registered successfully');
+    /*
+    |--------------------------------------------------------------------------
+    | API Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::group([
+        'middleware' => ['auth:api'],
+        'prefix' => 'api/tickets',
+        'as' => 'api.tickets.',
+        'namespace' => 'Ticket\Ticketit\Controllers\Api'
+    ], function () {
+        Route::get('/', 'TicketsController@index');
+        Route::post('/', 'TicketsController@store');
+        Route::get('/{id}', 'TicketsController@show');
+        Route::put('/{id}', 'TicketsController@update');
+        Route::delete('/{id}', 'TicketsController@destroy');
+    });
+
+    Log::info('All ticket routes registered successfully');
 
 } catch (\Exception $e) {
     Log::error('Error registering ticket routes', [
@@ -166,15 +201,3 @@ try {
         'trace' => $e->getTraceAsString()
     ]);
 }
-
-// Debug Middleware
-Route::aliasMiddleware('ticketit.debug', function ($request, $next) {
-    Log::info('Ticket Route accessed:', [
-        'uri' => $request->getRequestUri(),
-        'method' => $request->getMethod(),
-        'user' => auth()->check() ? auth()->user()->only(['id', 'name', 'email']) : 'Guest',
-        'customer' => auth()->guard('customer')->check() ? 
-            auth()->guard('customer')->user()->only(['id', 'name', 'email']) : null
-    ]);
-    return $next($request);
-});
