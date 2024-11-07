@@ -506,6 +506,10 @@ public function updateStatus(Request $request, $id)
                 Auth::guard('customer')->user()->only(['id', 'name', 'email']) : null
         ]);
 
+        if (!Auth::guard('customer')->check()) {
+            throw new \Exception('Authentication required');
+        }
+
         DB::beginTransaction();
 
         // Validate request
@@ -522,75 +526,88 @@ public function updateStatus(Request $request, $id)
                 ->withInput();
         }
 
-        // Get  category
-        $category = Category::firstOrCreate(
-            ['name' => $request->category_name],
-            ['color' => $this->getCategoryColor($request->category_name)]
-        );
+        try {
+            // Get or create category
+            $category = Category::firstOrCreate(
+                ['name' => $request->category_name],
+                ['color' => $this->getCategoryColor($request->category_name)]
+            );
 
-        // Get  priority
-        $priority = Priority::firstOrCreate(
-            ['name' => $request->priority_name],
-            ['color' => $this->getPriorityColor($request->priority_name)]
-        );
+            // Get  priority
+            $priority = Priority::firstOrCreate(
+                ['name' => $request->priority_name],
+                ['color' => $this->getPriorityColor($request->priority_name)]
+            );
 
-        // Get default status
-        $statusId = Setting::grab('default_status_id', 1);
-        $status = Status::findOrCreate($statusId, [
-            'name' => 'Open',
-            'color' => '#0014f4'
-        ]);
+            // Get default status
+            $defaultStatusId = Setting::grab('default_status_id', 1);
+            $status = Status::firstOrCreate(
+                ['id' => $defaultStatusId],
+                [
+                    'name' => 'Open',
+                    'color' => '#0014f4'
+                ]
+            );
 
-        // Create ticket
-        $ticket = Ticket::create([
-            'subject' => $request->subject,
-            'content' => $request->content,
-            'status_id' => $status->id,
-            'priority_id' => $priority->id,
-            'category_id' => $category->id,
-            'customer_id' => Auth::guard('customer')->id()
-        ]);
+            // Create ticket
+            $ticket = new Ticket();
+            $ticket->subject = $request->subject;
+            $ticket->content = $request->content;
+            $ticket->status_id = $status->id;
+            $ticket->priority_id = $priority->id;
+            $ticket->category_id = $category->id;
+            $ticket->customer_id = Auth::guard('customer')->id();
+            
+            if (!$ticket->save()) {
+                throw new \Exception('Failed to save ticket');
+            }
 
-        DB::commit();
+            DB::commit();
 
-        Log::info('Ticket created successfully', [
-            'ticket_id' => $ticket->id,
-            'customer_id' => $ticket->customer_id
-        ]);
+            Log::info('Ticket created successfully', [
+                'ticket_id' => $ticket->id,
+                'customer_id' => $ticket->customer_id
+            ]);
 
-        return redirect()->route('customer.tickets.index')
-            ->with('success', 'Ticket has been created successfully!');
+            return redirect()->route('customer.tickets.index')
+                ->with('success', 'Ticket has been created successfully!');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
 
     } catch (\Exception $e) {
-        DB::rollBack();
         Log::error('Error creating ticket: ' . $e->getMessage(), [
-            'trace' => $e->getTraceAsString()
+            'trace' => $e->getTraceAsString(),
+            'request' => $request->all()
         ]);
         
         return redirect()->back()
             ->with('error', 'Failed to create ticket: ' . $e->getMessage())
             ->withInput();
     }
-}   
+}
+
     protected function getCategoryColor($name)
     {
-        $colors = [
+        return [
             'Technical' => '#0014f4',
             'Billing' => '#2b9900',
             'Customer Service' => '#7e0099'
-        ];
-        return $colors[$name] ?? '#000000';
+        ][$name] ?? '#000000';
     }
 
     protected function getPriorityColor($name)
-{
-    $colors = [
-        'Low' => '#069900',
-        'Medium' => '#e1d200',
-        'High' => '#e10000'
-    ];
-    return $colors[$name] ?? '#000000';
-}
+    {
+        return [
+            'Low' => '#069900',
+            'Medium' => '#e1d200',
+            'High' => '#e10000'
+        ][$name] ?? '#000000';
+    }
+
+
 
 
 
