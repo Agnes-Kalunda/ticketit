@@ -228,7 +228,7 @@ public function updateStatus(Request $request, $id)
                 'role' => $user->ticketit_admin ? 'admin' : 'agent'
             ]);
 
-            return view('ticketit::bootstrap3.tickets.staff.manageStaffTicket', [
+            return view('ticketit::tickets.staff.manageStaffTicket', [
                 'ticket' => $ticket,
                 'isAdmin' => $user->ticketit_admin,
                 'isAgent' => $user->ticketit_agent,
@@ -242,7 +242,7 @@ public function updateStatus(Request $request, $id)
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return redirect()->route('staff.tickets.index')
+            return redirect()->route('ticketit::tickets.staff.index')
                 ->with('error', 'Error loading ticket. Please try again.');
         }
     }
