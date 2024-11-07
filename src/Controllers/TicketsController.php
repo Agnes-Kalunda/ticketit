@@ -251,25 +251,26 @@ class TicketsController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             if (!$user->ticketit_admin) {
                 return redirect()->back()
                     ->with('error', 'Only administrators can assign tickets');
             }
-            $ticket = $this->tickets->findOrFail($id);
+
             // Validate agent selection
-            $this->validate($request, [
+            $validatedData = $request->validate([
                 'agent_id' => 'required|exists:users,id,ticketit_agent,1'
             ]);
 
-            // Assign ticket
-            $ticket->agent_id = $request->agent_id;
+            // Find and assign the ticket
+            $ticket = $this->tickets->findOrFail($id);
+            $ticket->agent_id = $validatedData['agent_id'];
             $ticket->save();
 
             // Log the assignment
             Log::info('Ticket assigned:', [
                 'ticket_id' => $id,
-                'agent_id' => $request->agent_id,
+                'agent_id' => $validatedData['agent_id'],
                 'admin_id' => $user->id
             ]);
 
@@ -287,6 +288,7 @@ class TicketsController extends Controller
                 ->with('error', 'Error assigning ticket');
         }
     }
+
     public function data($complete = false)
     {
         if (LaravelVersion::min('5.4')) {
