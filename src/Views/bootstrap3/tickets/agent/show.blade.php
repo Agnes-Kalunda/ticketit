@@ -54,7 +54,7 @@
                             <h6 class="mb-0">Update Ticket Status</h6>
                         </div>
                         <div class="card-body">
-                            <form action="{{ route('status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
+                            <form action="{{ route('staff.tickets.status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
                                 @csrf
                                 <select name="status" class="form-control">
                                     @foreach($statuses as $id => $name)
@@ -75,7 +75,7 @@
                             <h6 class="mb-0">Add a Comment</h6>
                         </div>
                         <div class="card-body">
-                            <form action="{{ route('staff.tickets.comments.store', $ticket->id) }}" method="POST">
+                            <form action="{{ route('staff.tickets.agent.comments.store', $ticket->id) }}" method="POST">
                                 @csrf
                                 <div class="form-group mb-3">
                                     <label for="content">Your Comment:</label>
