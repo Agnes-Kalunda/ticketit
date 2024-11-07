@@ -192,86 +192,55 @@ class TicketsController extends Controller
     public function staffShow($id)
 {
     try {
-        $user = Auth::guard('web')->user();
-        
-        // Log access attempt
-        Log::info('Staff show ticket access:', [
-            'ticket_id' => $id,
-            'user_id' => $user->id,
-            'is_admin' => $user->ticketit_admin,
-            'is_agent' => $user->ticketit_agent
-        ]);
-
+        // Get the ticket with relationships
         $ticket = $this->tickets->with([
             'status', 
             'priority', 
             'category', 
             'customer', 
             'agent', 
-            'comments.user',
-            'statusHistory'
+            'comments.user'
         ])->findOrFail($id);
 
-        $viewData = [
-            'ticket' => $ticket
-        ];
-
-        // Admin view
-        if ($user->ticketit_admin) {
-            // Get available agents for assignment
+        // Check if admin
+        if ($this->agent->isAdmin()) {
+            // Get available agents using Agent model
             $agents = $this->agent->agents()->get();
-            
-            $viewData['isAdmin'] = true;
-            $viewData['isAgent'] = false;
-            $viewData['agents'] = $agents;
-            $viewData['statuses'] = Status::pluck('name', 'id');
 
-            Log::info('Loading admin view:', [
-                'ticket_id' => $id,
-                'agent_count' => $agents->count()
+            return view('ticketit::tickets.staff.show', [
+                'ticket' => $ticket,
+                'isAdmin' => true,
+                'isAgent' => false,
+                'agents' => $agents,
+                'statuses' => Status::pluck('name', 'id')
             ]);
-
-            return view('ticketit::tickets.staff.show', $viewData);
         }
 
-        // Agent view - but only for assigned tickets
-        if ($user->ticketit_agent) {
-            if ($ticket->agent_id !== $user->id) {
-                Log::warning('Agent attempted to view unassigned ticket:', [
-                    'agent_id' => $user->id,
-                    'ticket_id' => $id
-                ]);
-
+        // Check if agent
+        if ($this->agent->isAgent(auth()->id())) {
+            // Check if ticket is assigned to this agent
+            if (!$this->agent->isAssignedAgent($id)) {
                 return redirect()->route('staff.tickets.index')
                     ->with('error', 'You can only view tickets assigned to you');
             }
 
-            $viewData['isAdmin'] = false;
-            $viewData['isAgent'] = true;
-            $viewData['statuses'] = Status::pluck('name', 'id');
-
-            Log::info('Loading agent view:', [
-                'ticket_id' => $id,
-                'agent_id' => $user->id
+            return view('ticketit::tickets.staff.show', [
+                'ticket' => $ticket,
+                'isAdmin' => false,
+                'isAgent' => true,
+                'statuses' => Status::pluck('name', 'id')
             ]);
-
-            return view('ticketit::tickets.staff.show', $viewData);
         }
 
-        Log::warning('Unauthorized access attempt:', [
-            'user_id' => $user->id,
-            'ticket_id' => $id
-        ]);
-
+        // Neither admin nor agent
         return redirect()->route('staff.tickets.index')
             ->with('error', 'Unauthorized access');
 
     } catch (\Exception $e) {
-        Log::error('Error in staffShow:', [
+        Log::error('Error showing ticket:', [
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString(),
-            'ticket_id' => $id,
-            'user_id' => auth()->id()
+            'ticket_id' => $id
         ]);
 
         return redirect()->route('staff.tickets.index')
@@ -281,18 +250,27 @@ class TicketsController extends Controller
     public function assignTicket(Request $request, $id)
     {
         try {
-            $request->validate([
+            $user = Auth::user();
+            
+            if (!$user->ticketit_admin) {
+                return redirect()->back()
+                    ->with('error', 'Only administrators can assign tickets');
+            }
+            $ticket = $this->tickets->findOrFail($id);
+            // Validate agent selection
+            $this->validate($request, [
                 'agent_id' => 'required|exists:users,id,ticketit_agent,1'
             ]);
 
-            $ticket = $this->tickets->findOrFail($id);
+            // Assign ticket
             $ticket->agent_id = $request->agent_id;
             $ticket->save();
 
+            // Log the assignment
             Log::info('Ticket assigned:', [
                 'ticket_id' => $id,
                 'agent_id' => $request->agent_id,
-                'admin_id' => auth()->id()
+                'admin_id' => $user->id
             ]);
 
             return redirect()->back()
@@ -302,11 +280,11 @@ class TicketsController extends Controller
             Log::error('Error assigning ticket:', [
                 'error' => $e->getMessage(),
                 'ticket_id' => $id,
-                'admin_id' => auth()->id()
+                'admin_id' => $user->id ?? null
             ]);
 
             return redirect()->back()
-                ->with('error', 'Error assigning ticket: ' . $e->getMessage());
+                ->with('error', 'Error assigning ticket');
         }
     }
     public function data($complete = false)
