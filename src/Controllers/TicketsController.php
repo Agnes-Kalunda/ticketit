@@ -300,7 +300,7 @@ class TicketsController extends Controller
     public function agentShow($id)
 {
     try {
-        // Get the ticket with relationships 
+        // Get the ticket with relationships
         $ticket = $this->tickets->with([
             'status',
             'priority',
@@ -310,42 +310,27 @@ class TicketsController extends Controller
             'comments.user'
         ])->findOrFail($id);
 
-        // Check if the user is an agent
-        if ($this->agent->isAgent(auth()->id())) {
-            // Check if ticket is assigned to this agent
-            if (!$this->agent->isAssignedAgent($id)) {
-                return redirect()->route('staff.tickets.index')
-                    ->with('error', 'You can only view tickets assigned to you');
-            }
-
-            // Return the agent view for the ticket
-            return view('ticketit::tickets.agent.show', [
-                'ticket' => $ticket,
-                'isAdmin' => false,  
-                'isAgent' => true, 
-                'statuses' => Status::pluck('name', 'id')
-            ]);
+        // Check if the logged-in user is an agent
+        if (!$this->agent->isAgent(auth()->id())) {
+            return redirect()->route('staff.tickets.index')
+                ->with('error', 'Unauthorized access');
         }
 
-        // Check if the user is an admin (in case the admin tries to view the agent's view)
-        if ($this->agent->isAdmin()) {
-            // Get available agents (this can be used for other functionalities like reassigning tickets)
-            $agents = $this->agent->agents()->get();
-
-            return view('ticketit::tickets.agent.show', [
-                'ticket' => $ticket,
-                'isAdmin' => true,  
-                'isAgent' => false,  
-                'agents' => $agents,
-                'statuses' => Status::pluck('name', 'id')
-            ]);
+        // Check if the ticket is assigned to this agent
+        if ($ticket->agent_id !== auth()->id()) {
+            return redirect()->route('staff.tickets.index')
+                ->with('error', 'You can only view tickets assigned to you');
         }
 
-        // Neither agent nor admin (unauthorized access)
-        return redirect()->route('staff.tickets.index')
-            ->with('error', 'Unauthorized access');
+        // Return the agent view for the ticket
+        return view('ticketit::tickets.agent.show', [
+            'ticket' => $ticket,
+            'isAgent' => true,  
+            'statuses' => Status::pluck('name', 'id')
+        ]);
 
     } catch (\Exception $e) {
+        // Log any errors and redirect with a message
         Log::error('Error showing agent ticket:', [
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString(),
