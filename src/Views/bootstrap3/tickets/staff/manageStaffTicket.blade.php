@@ -14,12 +14,12 @@
                     <div class="row mb-4">
                         <div class="col-md-3">
                             <strong>Customer:</strong>
-                            <p>{{ $ticket->customer->name ?? 'N/A' }}</p>
+                            <p>{{ $ticket->customer->username ?? 'N/A' }}</p>
                         </div>
                         <div class="col-md-3">
                             <strong>Status:</strong>
                             <p>
-                                <span class="badge {{ $ticket->status->class ?? 'bg-secondary' }}">
+                                <span class="badge {{ $ticket->status->class ?? '' }}">
                                     {{ $ticket->status->name ?? 'Unknown' }}
                                 </span>
                             </p>
