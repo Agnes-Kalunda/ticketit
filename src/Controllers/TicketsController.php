@@ -163,13 +163,32 @@ class TicketsController extends Controller
     public function staffShow($id)
 {
     try {
-        $user = Auth::user();
-        $ticket = Ticket::with(['status', 'priority', 'category', 'customer', 'agent', 'comments.user'])
+        $user = Auth::guard('web')->user();
+        $ticket = $this->tickets->with(['status', 'priority', 'category', 'customer', 'agent', 'comments.user'])
             ->findOrFail($id);
 
         // Admin can view all tickets
         if ($user->isAdmin()) {
-            $agents = User::where('ticketit_agent', true)->get();
+            // Get available agents using DB query instead of User model directly
+            $agents = DB::table('users')
+                ->where('ticketit_agent', true)
+                ->select('id', 'name', 'email')
+                ->get();
+
+            // Get count of assigned tickets for each agent
+            $agentTicketCounts = DB::table('ticketit')
+                ->whereIn('agent_id', $agents->pluck('id'))
+                ->whereNull('completed_at')
+                ->select('agent_id', DB::raw('count(*) as assigned_tickets_count'))
+                ->groupBy('agent_id')
+                ->pluck('assigned_tickets_count', 'agent_id');
+
+            // Add ticket count to each agent
+            $agents = $agents->map(function($agent) use ($agentTicketCounts) {
+                $agent->assigned_tickets_count = $agentTicketCounts[$agent->id] ?? 0;
+                return $agent;
+            });
+
             return view('ticketit::tickets.staff.show', [
                 'ticket' => $ticket,
                 'isAdmin' => true,
@@ -182,7 +201,7 @@ class TicketsController extends Controller
         // Agents can only view assigned tickets
         if ($user->isAgent()) {
             if ($ticket->agent_id !== $user->id) {
-                return redirect()->route('user.dashboard')
+                return redirect()->route('staff.tickets.index')
                     ->with('error', 'You can only view tickets assigned to you');
             }
 
@@ -194,21 +213,22 @@ class TicketsController extends Controller
             ]);
         }
 
-        
+        // Regular users cannot view tickets
         return redirect()->route('user.dashboard')
             ->with('error', 'Unauthorized access');
 
     } catch (\Exception $e) {
         Log::error('Error showing ticket:', [
             'error' => $e->getMessage(),
-            'ticket_id' => $id
+            'trace' => $e->getTraceAsString(),
+            'ticket_id' => $id,
+            'user_id' => $user->id ?? null
         ]);
 
-        return redirect()->route('user.dashboard')
+        return redirect()->route('staff.tickets.index')
             ->with('error', 'Error loading ticket details');
     }
 }
-
     public function assignTicket(Request $request, $id)
 {
     try {
