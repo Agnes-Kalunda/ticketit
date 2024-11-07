@@ -84,17 +84,12 @@ class TicketsController extends Controller
     public function staffIndex()
 {
     try {
-        if (!Auth::guard('web')->check()) {
-            return redirect()->route('login')
-                ->with('error', 'You must be logged in to access this page.');
-        }
-
-        $tickets = app('db')->connection()
-            ->table('ticketit')
-            ->join('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
-            ->join('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
-            ->join('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
-            ->join('customers', 'ticketit.customer_id', '=', 'customers.id')
+        $user = $this->getAuthUser();
+        $query = DB::table('ticketit')
+            ->leftJoin('ticketit_statuses', 'ticketit.status_id', '=', 'ticketit_statuses.id')
+            ->leftJoin('ticketit_priorities', 'ticketit.priority_id', '=', 'ticketit_priorities.id')
+            ->leftJoin('ticketit_categories', 'ticketit.category_id', '=', 'ticketit_categories.id')
+            ->leftJoin('customers', 'ticketit.customer_id', '=', 'customers.id')
             ->select([
                 'ticketit.*',
                 'ticketit_statuses.name as status_name',
@@ -102,21 +97,55 @@ class TicketsController extends Controller
                 'ticketit_priorities.name as priority_name',
                 'ticketit_priorities.color as priority_color',
                 'ticketit_categories.name as category_name',
-                'ticketit_categories.color as category_color',
                 'customers.name as customer_name'
-            ])
-            ->orderBy('ticketit.created_at', 'desc')
-            ->paginate(10);
+            ]);
 
-        return view('ticketit::.tickets.staff.index', compact('tickets'));
+        // If user is agent but not admin, only show their tickets
+        if ($this->isAgent() && !$this->isAdmin()) {
+            $query->where('agent_id', $user->id);
+        }
+
+        $tickets = $query->orderBy('ticketit.created_at', 'desc')->get();
+
+        // Get agent list if user is admin
+        $agents = [];
+        if ($this->isAdmin()) {
+            $agents = $this->agent->agents()->get();
+        }
+
+        return view('ticketit::tickets.staff.index', [
+            'tickets' => $tickets,
+            'isAdmin' => $this->isAdmin(),
+            'isAgent' => $this->isAgent(),
+            'agents' => $agents,
+            'stats' => [
+                'total' => $tickets->count(),
+                'unassigned' => $tickets->whereNull('agent_id')->count(),
+                'open' => $tickets->where('status_id', 1)->count(),
+                'pending' => $tickets->where('status_id', 2)->count(),
+                'high_priority' => $tickets->where('priority_id', 3)->count()
+            ]
+        ]);
 
     } catch (\Exception $e) {
         Log::error('Error loading staff tickets: ' . $e->getMessage());
-        return redirect()->back()
-            ->with('error', 'Error loading tickets. Please try again.');
+        
+        return view('ticketit::tickets.staff.index', [
+            'tickets' => collect([]),
+            'isAdmin' => $this->isAdmin(),
+            'isAgent' => $this->isAgent(),
+            'agents' => collect([]),
+            'stats' => [
+                'total' => 0,
+                'unassigned' => 0,
+                'open' => 0,
+                'pending' => 0,
+                'high_priority' => 0
+            ],
+            'error' => 'Error loading tickets. Please try again.'
+        ]);
     }
 }
-
     public function updateStatus(Request $request, $id)
     {
         try {
