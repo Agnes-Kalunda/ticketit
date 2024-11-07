@@ -108,7 +108,7 @@ class TicketsController extends Controller
             ->orderBy('ticketit.created_at', 'desc')
             ->paginate(10);
 
-        return view('ticketit::bootstrap3.tickets.staff.index', compact('tickets'));
+        return view('ticketit::.tickets.staff.index', compact('tickets'));
 
     } catch (\Exception $e) {
         Log::error('Error loading staff tickets: ' . $e->getMessage());
@@ -161,42 +161,45 @@ class TicketsController extends Controller
         }
     }
     public function staffShow($id)
-    {
-        try {
-            $user = Auth::user();
-            $ticket = Ticket::with(['status', 'priority', 'category', 'user', 'agent', 'comments.user'])
-                ->findOrFail($id);
+{
+    try {
+        $user = $this->getAuthUser();
+        $ticket = Ticket::with(['status', 'priority', 'category', 'user', 'agent', 'comments.user'])
+            ->findOrFail($id);
 
-            // Check permissions
-            if (!$user->isAdmin() && !$user->isAgent()) {
-                return redirect()->route('home')
-                    ->with('error', 'Unauthorized access');
-            }
-
-            // If agent, check if assigned
-            if ($user->isAgent() && !$user->isAdmin() && $ticket->agent_id !== $user->id) {
-                return redirect()->route('staff.tickets.index')
-                    ->with('error', 'You can only view tickets assigned to you');
-            }
-
-            return view('ticketit::tickets.staff.show', [
-                'ticket' => $ticket,
-                'isAdmin' => $user->isAdmin(),
-                'isAgent' => $user->isAgent(),
-                'statuses' => Status::pluck('name', 'id'),
-                'agents' => User::where('ticketit_agent', true)->get()
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Error showing ticket:', [
-                'error' => $e->getMessage(),
-                'ticket_id' => $id
-            ]);
-
-            return redirect()->route('staff.tickets.index')
-                ->with('error', 'Error loading ticket details');
+        // Check permissions
+        if (!$this->isAdmin() && !$this->isAgent()) {
+            return redirect()->route('home')
+                ->with('error', 'Unauthorized access');
         }
+        
+        // If agent, check if assigned
+        if ($this->isAgent() && !$this->isAdmin() && $ticket->agent_id !== $user->id) {
+            return redirect()->route('tickeit::tickets.staff.index')
+                ->with('error', 'You can only view tickets assigned to you');
+        }
+
+        // Retrieve agents using the injected $agent model
+        $agents = $this->agent->where('ticketit_agent', true)->get();
+
+        return view('ticketit::tickets.staff.show', [
+            'ticket' => $ticket,
+            'isAdmin' => $this->isAdmin(),
+            'isAgent' => $this->isAgent(),
+            'statuses' => Status::pluck('name', 'id'),
+            'agents' => $agents
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error showing ticket:', [
+            'error' => $e->getMessage(),
+            'ticket_id' => $id
+        ]);
+
+        return redirect()->route('ticketit::tickets.staff.index')
+            ->with('error', 'Error loading ticket details');
     }
+}
 
 
     public function assignTicket(Request $request, $id)
