@@ -117,135 +117,128 @@ class TicketsController extends Controller
     }
 }
 
-public function updateStatus(Request $request, $id)
-{
-    try {
-        $user = Auth::user();
-        
-        // Validate user permissions
-        if (!$user->ticketit_admin && !$user->ticketit_agent) {
-            Logger::warning('Unauthorized status update attempt', [
-                'user_id' => $user->id,
+    public function updateStatus(Request $request, $id)
+    {
+        try {
+            $user = Auth::user();
+            
+            if (!$user->isAgent() && !$user->isAdmin()) {
+                return redirect()->back()
+                    ->with('error', 'Only agents can update ticket status');
+            }
+
+            $ticket = Ticket::findOrFail($id);
+            
+            if (!$user->isAdmin() && $ticket->agent_id !== $user->id) {
+                return redirect()->back()
+                    ->with('error', 'You can only update status of tickets assigned to you');
+            }
+
+            $status = Status::findOrFail($request->status);
+            $oldStatus = $ticket->status->name;
+            
+            $ticket->status_id = $status->id;
+            $ticket->save();
+
+            // Create audit log
+            Audit::create([
+                'operation' => "Status updated from {$oldStatus} to {$status->name}",
+                'user_id' => Auth::id(),
+                'ticket_id' => $ticket->id
+            ]);
+
+            return redirect()->back()
+                ->with('success', 'Ticket status updated successfully');
+
+        } catch (\Exception $e) {
+            Log::error('Error updating ticket status:', [
+                'error' => $e->getMessage(),
                 'ticket_id' => $id
             ]);
-            
+
             return redirect()->back()
-                ->with('error', 'You do not have permission to update ticket status.');
+                ->with('error', 'Error updating ticket status');
         }
-
-        $ticket = Ticket::findOrFail($id);
-
-        // Validate agent access
-        if ($user->ticketit_agent && !$user->ticketit_admin) {
-            if ($ticket->agent_id !== null && $ticket->agent_id !== $user->id) {
-                Logger::warning('Agent attempted to update unassigned ticket', [
-                    'agent_id' => $user->id,
-                    'ticket_id' => $id,
-                    'assigned_to' => $ticket->agent_id
-                ]);
-                
-                return redirect()->back()
-                    ->with('error', 'You can only update tickets assigned to you.');
-            }
-        }
-
-        $oldStatus = $ticket->status_id;
-        $newStatus = $request->status;
-
-        // Update ticket
-        $ticket->status_id = $newStatus;
-        
-        // Handle completion status
-        if ($newStatus == 4) { // Closed
-            $ticket->completed_at = now();
-        } elseif ($newStatus == 1) { 
-            $ticket->completed_at = null;
-        }
-
-        $ticket->save();
-
-        Logger::info('Ticket status updated', [
-            'ticket_id' => $id,
-            'old_status' => $oldStatus,
-            'new_status' => $newStatus,
-            'updated_by' => [
-                'id' => $user->id,
-                'role' => $user->ticketit_admin ? 'admin' : 'agent'
-            ]
-        ]);
-
-        return redirect()->back()
-            ->with('success', 'Ticket status has been updated successfully.');
-
-    } catch (\Exception $e) {
-        Logger::error('Error updating ticket status', [
-            'ticket_id' => $id,
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-
-        return redirect()->back()
-            ->with('error', 'Error updating ticket status. Please try again.');
     }
-}
-
     public function staffShow($id)
     {
         try {
-            $ticket = Ticket::with(['status', 'priority', 'category', 'customer'])
+            $user = Auth::user();
+            $ticket = Ticket::with(['status', 'priority', 'category', 'user', 'agent', 'comments.user'])
                 ->findOrFail($id);
 
-            $user = Auth::user();
-            
-            // Check if user has access to this ticket
-            if (!$user->ticketit_admin && !$user->ticketit_agent) {
-                Logger::warning('Unauthorized ticket access attempt', [
-                    'user_id' => $user->id,
-                    'ticket_id' => $id
-                ]);
-                
-                return redirect()->route('user.dashboard')
-                    ->with('error', 'You do not have permission to view this ticket.');
+            // Check permissions
+            if (!$user->isAdmin() && !$user->isAgent()) {
+                return redirect()->route('home')
+                    ->with('error', 'Unauthorized access');
             }
 
-            // If agent, check if there's assigned tickets
-            if ($user->ticketit_agent && !$user->ticketit_admin) {
-                if ($ticket->agent_id !== null && $ticket->agent_id !== $user->id) {
-                    Logger::warning('Agent attempted to view unassigned ticket', [
-                        'agent_id' => $user->id,
-                        'ticket_id' => $id,
-                        'assigned_to' => $ticket->agent_id
-                    ]);
-                    
-                    return redirect()->route('staff.tickets.index')
-                        ->with('error', 'You can only view tickets assigned to you.');
-                }
+            // If agent, check if assigned
+            if ($user->isAgent() && !$user->isAdmin() && $ticket->agent_id !== $user->id) {
+                return redirect()->route('staff.tickets.index')
+                    ->with('error', 'You can only view tickets assigned to you');
             }
 
-            Logger::info('Ticket viewed', [
-                'ticket_id' => $id,
-                'viewed_by' => $user->id,
-                'role' => $user->ticketit_admin ? 'admin' : 'agent'
-            ]);
-
-            return view('ticketit::tickets.staff.manageStaffTicket', [
+            return view('ticketit::tickets.staff.show', [
                 'ticket' => $ticket,
-                'isAdmin' => $user->ticketit_admin,
-                'isAgent' => $user->ticketit_agent,
-                'statuses' => Status::orderBy('name')->pluck('name', 'id')
+                'isAdmin' => $user->isAdmin(),
+                'isAgent' => $user->isAgent(),
+                'statuses' => Status::pluck('name', 'id'),
+                'agents' => User::where('ticketit_agent', true)->get()
             ]);
 
         } catch (\Exception $e) {
-            Logger::error('Error showing ticket', [
-                'ticket_id' => $id,
+            Log::error('Error showing ticket:', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'ticket_id' => $id
             ]);
 
-            return redirect()->route('ticketit::tickets.staff.index')
-                ->with('error', 'Error loading ticket. Please try again.');
+            return redirect()->route('staff.tickets.index')
+                ->with('error', 'Error loading ticket details');
         }
     }
+
+
+    public function assignTicket(Request $request, $id)
+{
+    try {
+        if (!Auth::user()->isAdmin()) {
+            return redirect()->back()
+                ->with('error', 'Only administrators can assign tickets');
+        }
+
+        $this->validate($request, [
+            'agent_id' => 'required|exists:users,id'
+        ]);
+
+        $ticket = Ticket::findOrFail($id);
+        $agent = User::where('ticketit_agent', true)
+            ->findOrFail($request->agent_id);
+
+        $ticket->agent_id = $agent->id;
+        $ticket->save();
+
+        // Create audit log
+        Audit::create([
+            'operation' => "Ticket assigned to agent {$agent->name}",
+            'user_id' => Auth::id(),
+            'ticket_id' => $ticket->id
+        ]);
+
+        return redirect()->back()
+            ->with('success', "Ticket assigned to {$agent->name}");
+
+    } catch (\Exception $e) {
+        Log::error('Error assigning ticket:', [
+            'error' => $e->getMessage(),
+            'ticket_id' => $id
+        ]);
+
+        return redirect()->back()
+            ->with('error', 'Error assigning ticket');
+    }
+}
+
 
     public function data($complete = false)
     {

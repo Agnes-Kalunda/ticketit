@@ -276,43 +276,166 @@ class TicketitServiceProvider extends ServiceProvider
     }
 
     protected function registerMiddleware()
-    {
-        try {
-            $router = $this->app['router'];
+{
+    try {
+        $router = $this->app['router'];
 
-            // Debug middleware
-            $router->aliasMiddleware('ticketit.debug', function(Request $request, \Closure $next) {
-                Log::info('Ticketit Request:', [
-                    'url' => $request->fullUrl(),
-                    'method' => $request->method(),
-                    'input' => $request->all(),
-                    'auth' => [
-                        'customer_check' => Auth::guard('customer')->check(),
-                        'customer_id' => Auth::guard('customer')->id(),
-                        'web_check' => Auth::guard('web')->check(),
-                        'web_id' => Auth::guard('web')->id()
-                    ]
-                ]);
-                return $next($request);
-            });
+        // Debug middleware
+        $router->aliasMiddleware('ticketit.debug', function(Request $request, \Closure $next) {
+            Log::info('Ticketit Request:', [
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'input' => $request->all(),
+                'auth' => [
+                    'customer_check' => Auth::guard('customer')->check(),
+                    'customer_id' => Auth::guard('customer')->id(),
+                    'web_check' => Auth::guard('web')->check(),
+                    'web_id' => Auth::guard('web')->id()
+                ]
+            ]);
+            return $next($request);
+        });
 
-            // Register core middleware
-            $router->aliasMiddleware('ticketit.customer', 
-                \Ticket\Ticketit\Middleware\CustomerAuthMiddleware::class);
+        // Register core middleware
+        $router->aliasMiddleware('ticketit.customer', 
+            \Ticket\Ticketit\Middleware\CustomerAuthMiddleware::class);
 
-            $router->aliasMiddleware('ticketit.staff', 
-                \Ticket\Ticketit\Middleware\StaffAuthMiddleware::class);
+        $router->aliasMiddleware('ticketit.staff', 
+            \Ticket\Ticketit\Middleware\StaffAuthMiddleware::class);
 
-            $router->aliasMiddleware('ticketit.admin', 
-                \Ticket\Ticketit\Middleware\AdminAuthMiddleware::class);
+        $router->aliasMiddleware('ticketit.admin', 
+            \Ticket\Ticketit\Middleware\AdminAuthMiddleware::class);
 
-            $router->aliasMiddleware('ticketit.agent', 
-                \Ticket\Ticketit\Middleware\AgentAuthMiddleware::class);
+        $router->aliasMiddleware('ticketit.agent', 
+            \Ticket\Ticketit\Middleware\AgentAuthMiddleware::class);
 
-        } catch (\Exception $e) {
-            Log::error('Error registering middleware: ' . $e->getMessage());
-        }
+        // Register comment-related middleware
+        $router->aliasMiddleware('ticketit.comment.create', 
+            \Ticket\Ticketit\Middleware\CommentCreateMiddleware::class);
+
+        $router->aliasMiddleware('ticketit.comment.update', 
+            \Ticket\Ticketit\Middleware\CommentUpdateMiddleware::class);
+
+        $router->aliasMiddleware('ticketit.comment.delete', 
+            \Ticket\Ticketit\Middleware\CommentDeleteMiddleware::class);
+
+        // Comment permission middleware
+        $router->aliasMiddleware('ticketit.can-comment', function(Request $request, \Closure $next) {
+            $user = Auth::guard('web')->user();
+            $customer = Auth::guard('customer')->user();
+            $ticket = null;
+
+            if ($request->route('ticket')) {
+                $ticket = \Ticket\Ticketit\Models\Ticket::find($request->route('ticket'));
+            }
+
+            Log::info('Comment Permission Check:', [
+                'url' => $request->fullUrl(),
+                'ticket_id' => $ticket ? $ticket->id : null,
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'is_admin' => $user->ticketit_admin,
+                    'is_agent' => $user->ticketit_agent
+                ] : null,
+                'customer' => $customer ? [
+                    'id' => $customer->id
+                ] : null
+            ]);
+
+            // Check permissions
+            if (!$ticket) {
+                return redirect()->back()->with('error', 'Ticket not found');
+            }
+
+            $canComment = false;
+
+            if ($user) {
+                // Admin can always comment
+                if ($user->ticketit_admin) {
+                    $canComment = true;
+                }
+                // Agent can comment on assigned tickets
+                elseif ($user->ticketit_agent && $ticket->agent_id === $user->id) {
+                    $canComment = true;
+                }
+            }
+            elseif ($customer && $ticket->customer_id === $customer->id) {
+                // Customer can comment on their own tickets
+                $canComment = true;
+            }
+
+            if (!$canComment) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json(['error' => 'Unauthorized'], 403);
+                }
+                return redirect()->back()->with('error', 'You cannot comment on this ticket');
+            }
+
+            return $next($request);
+        });
+
+        // Comment ownership middleware for updates/deletes
+        $router->aliasMiddleware('ticketit.comment-owner', function(Request $request, \Closure $next) {
+            $user = Auth::guard('web')->user();
+            $customer = Auth::guard('customer')->user();
+            $comment = null;
+
+            if ($request->route('comment')) {
+                $comment = \Ticket\Ticketit\Models\Comment::find($request->route('comment'));
+            }
+
+            Log::info('Comment Ownership Check:', [
+                'url' => $request->fullUrl(),
+                'comment_id' => $comment ? $comment->id : null,
+                'user' => $user ? [
+                    'id' => $user->id,
+                    'is_admin' => $user->ticketit_admin,
+                    'is_agent' => $user->ticketit_agent
+                ] : null,
+                'customer' => $customer ? [
+                    'id' => $customer->id
+                ] : null
+            ]);
+
+            if (!$comment) {
+                return redirect()->back()->with('error', 'Comment not found');
+            }
+
+            $canModify = false;
+
+            if ($user) {
+                // Admin can modify any comment
+                if ($user->ticketit_admin) {
+                    $canModify = true;
+                }
+                // Agent can modify their own comments
+                elseif ($user->ticketit_agent && $comment->user_id === $user->id) {
+                    $canModify = true;
+                }
+            }
+            elseif ($customer && $comment->customer_id === $customer->id) {
+                // Customer can modify their own comments
+                $canModify = true;
+            }
+
+            if (!$canModify) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json(['error' => 'Unauthorized'], 403);
+                }
+                return redirect()->back()->with('error', 'You cannot modify this comment');
+            }
+
+            return $next($request);
+        });
+
+        Log::info('All middleware registered successfully');
+
+    } catch (\Exception $e) {
+        Log::error('Error registering middleware: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString()
+        ]);
     }
+}
 
     protected function checkDatabase()
     {
