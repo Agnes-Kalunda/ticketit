@@ -47,10 +47,34 @@
                         </div>
                     </div>
 
-                    @if($isAdmin || $isAgent)
-                    <div class="card">
+                    {{-- Admin: Assign Ticket to Available Agent --}}
+                    @if($isAdmin)
+                    <div class="card mb-4">
                         <div class="card-header">
-                            <h6 class="mb-0">Update Status</h6>
+                            <h6 class="mb-0">Assign Ticket to Agent</h6>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ route('staff.tickets.assign', $ticket->id) }}" method="POST" class="d-flex gap-2">
+                                @csrf
+                                <select name="agent_id" class="form-control">
+                                    <option value="">Select Agent</option>
+                                    @foreach($agents as $agent)
+                                        <option value="{{ $agent->id }}" {{ $ticket->agent_id == $agent->id ? 'selected' : '' }}>
+                                            {{ $agent->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <button type="submit" class="btn btn-primary">Assign</button>
+                            </form>
+                        </div>
+                    </div>
+                    @endif
+
+                    {{-- For Agents to Update Status --}}
+                    @if($isAgent && $ticket->agent_id == auth()->id())
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">Update Ticket Status</h6>
                         </div>
                         <div class="card-body">
                             <form action="{{ route('staff.tickets.status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
@@ -62,13 +86,50 @@
                                         </option>
                                     @endforeach
                                 </select>
-                                <button type="submit" class="btn btn-primary">Update</button>
+                                <button type="submit" class="btn btn-primary">Update Status</button>
+                            </form>
+                        </div>
+                    </div>
+                    @endif
+
+                    {{-- Customer: Add Comments --}}
+                    @if($isCustomer)
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">Add a Comment</h6>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ route('staff.tickets.comments.store', $ticket->id) }}" method="POST">
+                                @csrf
+                                <div class="form-group mb-3">
+                                    <label for="content">Your Comment:</label>
+                                    <textarea name="content" id="content" class="form-control" rows="3" placeholder="Type your comment..."></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Submit Comment</button>
                             </form>
                         </div>
                     </div>
                     @endif
                 </div>
             </div>
+
+            {{-- Comments Section --}}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0">Comments & Responses</h6>
+                    <span class="badge bg-primary">{{ $ticket->comments->count() }} Comment{{ $ticket->comments->count() > 1 ? 's' : '' }}</span>
+                </div>
+                <div class="card-body">
+                    @foreach($ticket->comments as $comment)
+                    <div class="mb-3 p-3 border rounded {{ $comment->user_id == auth()->id() ? 'border-primary bg-light' : '' }}">
+                        <strong>{{ $comment->user->name }}</strong>
+                        <small class="text-muted">{{ $comment->created_at->diffForHumans() }}</small>
+                        <p>{!! nl2br(e($comment->content)) !!}</p>
+                    </div>
+                    @endforeach
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
