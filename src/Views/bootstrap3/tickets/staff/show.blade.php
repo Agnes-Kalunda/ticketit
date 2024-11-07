@@ -8,7 +8,7 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Ticket #{{ $ticket->id }}</h5>
-                    <a href="{{ route('staff.tickets.index') }}" class="btn btn-secondary">Back to List</a>
+                    <!-- <a href="{{ route('staff.tickets.index') }}" class="btn btn-secondary">Back to List</a> -->
                 </div>
 
                 @if($isAdmin)
@@ -32,7 +32,7 @@
                                                     <option value="{{ $agent->id }}" 
                                                             {{ $ticket->agent_id == $agent->id ? 'selected' : '' }}>
                                                         {{ $agent->name }} 
-                                                        (Current tickets: {{ $agent->assigned_tickets_count }})
+                                                       
                                                     </option>
                                                 @endforeach
                                             </select>

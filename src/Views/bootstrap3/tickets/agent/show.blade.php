@@ -7,7 +7,7 @@
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Ticket #{{ $ticket->id }}: {{ $ticket->subject }}</h5>
-                    <a href="{{ route('staff.tickets.index') }}" class="btn btn-secondary btn-sm">Back to List</a>
+                    <!-- <a href="{{ route('staff.tickets.index') }}" class="btn btn-secondary btn-sm">Back to List</a> -->
                 </div>
 
                 <div class="card-body">
@@ -47,37 +47,14 @@
                         </div>
                     </div>
 
-                    {{-- Admin: Assign Ticket to Available Agent --}}
-                    @if($isAdmin)
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0">Assign Ticket to Agent</h6>
-                        </div>
-                        <div class="card-body">
-                            <form action="{{ route('staff.tickets.assign', $ticket->id) }}" method="POST" class="d-flex gap-2">
-                                @csrf
-                                <select name="agent_id" class="form-control">
-                                    <option value="">Select Agent</option>
-                                    @foreach($agents as $agent)
-                                        <option value="{{ $agent->id }}" {{ $ticket->agent_id == $agent->id ? 'selected' : '' }}>
-                                            {{ $agent->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                <button type="submit" class="btn btn-primary">Assign</button>
-                            </form>
-                        </div>
-                    </div>
-                    @endif
-
-                    {{-- For Agents to Update Status --}}
+                    <!-- Update Ticket Status for Agent -->
                     @if($isAgent && $ticket->agent_id == auth()->id())
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">Update Ticket Status</h6>
                         </div>
                         <div class="card-body">
-                            <form action="{{ route('staff.tickets.status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
+                            <form action="{{ route('status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
                                 @csrf
                                 <select name="status" class="form-control">
                                     @foreach($statuses as $id => $name)
@@ -92,8 +69,7 @@
                     </div>
                     @endif
 
-                    {{-- Customer: Add Comments --}}
-                    @if($isCustomer)
+                    <!-- Agent Add Comment -->
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">Add a Comment</h6>
@@ -109,11 +85,11 @@
                             </form>
                         </div>
                     </div>
-                    @endif
+
                 </div>
             </div>
 
-            {{-- Comments Section --}}
+            <!-- Comments Section -->
             <div class="card mb-4">
                 <div class="card-header">
                     <h6 class="mb-0">Comments & Responses</h6>

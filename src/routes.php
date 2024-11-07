@@ -64,6 +64,7 @@ Route::group([
     Route::middleware('Ticket\Ticketit\Middleware\StaffAuthMiddleware')->group(function() {
         Route::get('/', 'TicketsController@staffIndex')->name('index');
         Route::get('/{id}', 'TicketsController@staffShow')->name('show');
+
     });
 
     // Admin only routes
@@ -73,6 +74,7 @@ Route::group([
 
     // Agent only routes
     Route::middleware('Ticket\Ticketit\Middleware\AgentAuthMiddleware')->group(function() {
+        Route::get('/{id}/view', 'TicketsController@agentShow')->name('agent.show');
         Route::post('/{id}/status', 'TicketsController@updateStatus')->name('status.update');
     });
 

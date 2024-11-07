@@ -150,22 +150,27 @@ class TicketsController extends Controller
     {
         try {
             $user = Auth::user();
-            
-            if (!$user->isAgent() && !$user->isAdmin()) {
+
+            // Check if user is an agent
+            if (!$user->isAgent()) {
                 return redirect()->back()
                     ->with('error', 'Only agents can update ticket status');
             }
 
+            // Get the ticket
             $ticket = Ticket::findOrFail($id);
-            
-            if (!$user->isAdmin() && $ticket->agent_id !== $user->id) {
+
+            // Check if the ticket is assigned to the logged-in agent
+            if ($ticket->agent_id !== $user->id) {
                 return redirect()->back()
-                    ->with('error', 'You can only update status of tickets assigned to you');
+                    ->with('error', 'You can only update the status of tickets assigned to you');
             }
 
+            // Find the status to update to
             $status = Status::findOrFail($request->status);
             $oldStatus = $ticket->status->name;
-            
+
+            // Update ticket status
             $ticket->status_id = $status->id;
             $ticket->save();
 
@@ -176,10 +181,12 @@ class TicketsController extends Controller
                 'ticket_id' => $ticket->id
             ]);
 
+            // Redirect back with success message
             return redirect()->back()
                 ->with('success', 'Ticket status updated successfully');
 
         } catch (\Exception $e) {
+            // Log error and redirect with error message
             Log::error('Error updating ticket status:', [
                 'error' => $e->getMessage(),
                 'ticket_id' => $id
@@ -288,6 +295,53 @@ class TicketsController extends Controller
                 ->with('error', 'Error assigning ticket');
         }
     }
+
+
+    public function agentShow($id)
+{
+    try {
+        // Get the ticket with relationships
+        $ticket = $this->tickets->with([
+            'status',
+            'priority',
+            'category',
+            'customer',
+            'agent',
+            'comments.user'
+        ])->findOrFail($id);
+
+        // Check if the logged-in user is an agent
+        if (!$this->agent->isAgent(auth()->id())) {
+            return redirect()->route('staff.tickets.index')
+                ->with('error', 'Unauthorized access');
+        }
+
+        // Check if the ticket is assigned to this agent
+        if ($ticket->agent_id !== auth()->id()) {
+            return redirect()->route('staff.tickets.index')
+                ->with('error', 'You can only view tickets assigned to you');
+        }
+
+        // Return the agent view for the ticket
+        return view('ticketit::tickets.agent.show', [
+            'ticket' => $ticket,
+            'isAgent' => true,  
+            'statuses' => Status::pluck('name', 'id')
+        ]);
+
+    } catch (\Exception $e) {
+        // Log any errors and redirect with a message
+        Log::error('Error showing agent ticket:', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'ticket_id' => $id
+        ]);
+
+        return redirect()->route('staff.tickets.index')
+            ->with('error', 'Error loading ticket details');
+    }
+}
+
 
     public function data($complete = false)
     {
