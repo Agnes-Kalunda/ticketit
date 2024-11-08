@@ -23,7 +23,8 @@
     ],
     "autoload": {
         "psr-4": {
-            "Ticket\\Ticketit\\": "src"
+            "Ticket\\Ticketit\\": "src",
+            "Ticket\\Ticketit\\Http\\": "src/Http"
         }
     },
     "extra": {
