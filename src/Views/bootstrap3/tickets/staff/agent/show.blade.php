@@ -21,9 +21,6 @@
 .comment-box:hover {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
-.gap-2 {
-    gap: 0.5rem;
-}
 .text-muted {
     color: #6c757d;
 }
@@ -32,6 +29,9 @@
 }
 .bg-light {
     background-color: #f8f9fa;
+}
+.gap-2 {
+    gap: 0.5rem;
 }
 </style>
 @endsection
@@ -54,140 +54,150 @@
                 </div>
             @endif
 
-            <div class="card">
+            <!-- Ticket Details Card -->
+            <div class="card shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Ticket #{{ $ticket->id }}: {{ e($ticket->subject) }}</h5>
-                    <a href="{{ route('staff.tickets.index') }}" class="btn btn-secondary btn-sm">Back to List</a>
+                    <div>
+                        <h5 class="mb-0">Ticket #{{ $ticket->id }}</h5>
+                        <p class="text-muted mb-0">{{ $ticket->subject }}</p>
+                    </div>
+                    <a href="{{ route('staff.tickets.index') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left"></i> Back to List
+                    </a>
                 </div>
 
                 <div class="card-body">
-                    <!-- Ticket Details -->
+                    <!-- Ticket Information -->
                     <div class="row mb-4">
                         <div class="col-md-3">
-                            <strong>Customer:</strong>
-                            <p>{{ e($ticket->customer->username ?? 'N/A') }}</p>
+                            <div class="text-muted mb-1">Customer</div>
+                            <strong>{{ $ticket->customer->username ?? 'N/A' }}</strong>
                         </div>
                         <div class="col-md-3">
-                            <strong>Status:</strong>
-                            <p>
-                                <span class="badge badge-status-{{ strtolower($ticket->status->name ?? 'unknown') }}">
-                                    {{ e($ticket->status->name ?? 'Unknown') }}
-                                </span>
-                            </p>
+                            <div class="text-muted mb-1">Status</div>
+                            <span class="badge badge-status-{{ strtolower($ticket->status->name ?? 'unknown') }}">
+                                {{ $ticket->status->name ?? 'Unknown' }}
+                            </span>
                         </div>
                         <div class="col-md-3">
-                            <strong>Priority:</strong>
-                            <p>
-                                <span class="badge badge-priority-{{ strtolower($ticket->priority->name ?? 'unknown') }}">
-                                    {{ e($ticket->priority->name ?? 'Unknown') }}
-                                </span>
-                            </p>
+                            <div class="text-muted mb-1">Priority</div>
+                            <span class="badge badge-priority-{{ strtolower($ticket->priority->name ?? 'unknown') }}">
+                                {{ $ticket->priority->name ?? 'Unknown' }}
+                            </span>
                         </div>
                         <div class="col-md-3">
-                            <strong>Created:</strong>
-                            <p>{{ $ticket->created_at->format('M d, Y H:i') }}</p>
+                            <div class="text-muted mb-1">Created</div>
+                            <strong>{{ $ticket->created_at->format('M d, Y H:i') }}</strong>
                         </div>
                     </div>
 
                     <!-- Ticket Content -->
                     <div class="card mb-4">
                         <div class="card-header">
-                            <h6 class="mb-0">Ticket Content</h6>
+                            <h6 class="mb-0">Description</h6>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body bg-light">
                             {!! nl2br(e($ticket->content)) !!}
                         </div>
                     </div>
 
-                    <!-- Status Update Section - Only for Assigned Agent -->
+                    <!-- Status Update Form - Only for Assigned Agent -->
                     @if($isAgent && !$isAdmin && $ticket->agent_id == auth()->id())
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0">Update Ticket Status</h6>
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">Update Status</h6>
+                            </div>
+                            <div class="card-body">
+                                <form action="{{ route('staff.tickets.status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
+                                    @csrf
+                                    <select name="status" class="form-control @error('status') is-invalid @enderror">
+                                        @foreach($statuses as $id => $name)
+                                            <option value="{{ $id }}" {{ old('status', $ticket->status_id) == $id ? 'selected' : '' }}>
+                                                {{ $name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('status')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                    <button type="submit" class="btn btn-primary">Update Status</button>
+                                </form>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <form action="{{ route('staff.tickets.status.update', $ticket->id) }}" method="POST" class="d-flex gap-2">
-                                @csrf
-                                <select name="status" class="form-control @error('status') is-invalid @enderror">
-                                    @foreach($statuses as $id => $name)
-                                        <option value="{{ $id }}" {{ old('status', $ticket->status_id) == $id ? 'selected' : '' }}>
-                                            {{ e($name) }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('status')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                @enderror
-                                <button type="submit" class="btn btn-primary">Update Status</button>
-                            </form>
-                        </div>
-                    </div>
                     @endif
 
                     <!-- Comment Form - Not for Admins -->
                     @if(!$isAdmin && ($isAgent && $ticket->agent_id == auth()->id()))
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="mb-0">Add a Comment</h6>
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">Add Comment</h6>
+                            </div>
+                            <div class="card-body">
+                                @if($errors->any())
+                                    <div class="alert alert-danger">
+                                        <ul class="mb-0">
+                                            @foreach($errors->all() as $error)
+                                                <li>{{ $error }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
+
+                                <form action="{{ route('staff.tickets.comments.store', $ticket->id) }}" method="POST">
+                                    @csrf
+                                    <div class="form-group mb-3">
+                                        <label for="content">Your Comment:</label>
+                                        <textarea 
+                                            name="content" 
+                                            id="content" 
+                                            class="form-control @error('content') is-invalid @enderror" 
+                                            rows="3" 
+                                            placeholder="Type your comment here..."
+                                        >{{ old('content') }}</textarea>
+                                        @error('content')
+                                            <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Submit Comment</button>
+                                </form>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <form action="{{ route('staff.tickets.comments.store', $ticket->id) }}" method="POST">
-                                @csrf
-                                <div class="form-group mb-3">
-                                    <label for="content">Your Comment:</label>
-                                    <textarea 
-                                        name="content" 
-                                        id="content" 
-                                        class="form-control @error('content') is-invalid @enderror" 
-                                        rows="3" 
-                                        placeholder="Type your comment..."
-                                    >{{ old('content') }}</textarea>
-                                    @error('content')
-                                        <div class="invalid-feedback">{{ $message }}</div>
-                                    @enderror
-                                </div>
-                                <button type="submit" class="btn btn-primary">Submit Comment</button>
-                            </form>
-                        </div>
-                    </div>
                     @endif
 
-                    <!-- Comments Section - Visible to Everyone -->
-                    <div class="card mb-4">
+                    <!-- Comments Section -->
+                    <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">Comments & Responses</h6>
+                            <h6 class="mb-0">Comments History</h6>
                             <span class="badge bg-primary">
                                 {{ $ticket->comments->count() }} 
-                                Comment{{ $ticket->comments->count() != 1 ? 's' : '' }}
+                                {{ Str::plural('Comment', $ticket->comments->count()) }}
                             </span>
                         </div>
                         <div class="card-body">
-                            @if($ticket->comments->isNotEmpty())
-                                @foreach($ticket->comments->sortByDesc('created_at') as $comment)
-                                    <div class="comment-box mb-3 p-3 border rounded {{ $comment->user_id == auth()->id() ? 'border-primary bg-light' : '' }}">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <div>
-                                                <strong>{{ e($comment->user->name) }}</strong>
-                                                @if($comment->user->isAgent())
-                                                    <span class="badge bg-info ms-2">Agent</span>
-                                                @elseif($comment->user->isAdmin())
-                                                    <span class="badge bg-danger ms-2">Admin</span>
-                                                @else
-                                                    <span class="badge bg-secondary ms-2">Customer</span>
-                                                @endif
-                                            </div>
-                                            <small class="text-muted">{{ $comment->created_at->diffForHumans() }}</small>
+                            @forelse($ticket->comments->sortByDesc('created_at') as $comment)
+                                <div class="comment-box mb-3 p-3 border rounded {{ $comment->user_id == auth()->id() ? 'border-primary bg-light' : '' }}">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <div>
+                                            <strong>{{ $comment->user->name }}</strong>
+                                            @if($comment->user->isAgent())
+                                                <span class="badge bg-info ms-2">Agent</span>
+                                            @elseif($comment->user->isAdmin())
+                                                <span class="badge bg-danger ms-2">Admin</span>
+                                            @else
+                                                <span class="badge bg-secondary ms-2">Customer</span>
+                                            @endif
                                         </div>
-                                        <div class="comment-content">
-                                            {!! nl2br(e($comment->content)) !!}
-                                        </div>
+                                        <small class="text-muted">{{ $comment->created_at->diffForHumans() }}</small>
                                     </div>
-                                @endforeach
-                            @else
-                                <div class="text-muted text-center py-3">
+                                    <div class="comment-content">
+                                        {!! nl2br(e($comment->content)) !!}
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="text-center text-muted py-4">
                                     No comments yet
                                 </div>
-                            @endif
+                            @endforelse
                         </div>
                     </div>
                 </div>
