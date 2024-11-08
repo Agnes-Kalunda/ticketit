@@ -38,6 +38,7 @@ try {
         Route::post('/', 'TicketsController@store')->name('store');
         Route::get('/{ticket}', 'TicketsController@show')->name('show')
             ->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware');
+        Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
 
         // Customer Comments
         Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
@@ -65,6 +66,7 @@ try {
             Route::get('/', 'TicketsController@staffIndex')->name('index');
             Route::get('/dashboard', 'DashboardController@staffDashboard')->name('dashboard');
             Route::get('/{id}', 'TicketsController@staffShow')->name('show');
+            Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
         });
 
         // Agent Routes
