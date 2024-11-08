@@ -112,7 +112,7 @@
                 </div>
             @else
                 <div class="alert alert-info">
-                    This ticket is closed. Please create a new ticket if you need further assistance.
+                    This ticket is closed. Please create a new ticket if you need further assistance
                 </div>
             @endif
         </div>
