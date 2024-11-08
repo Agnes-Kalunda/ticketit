@@ -142,7 +142,7 @@ class TicketsController extends Controller
                 'pending' => 0,
                 'high_priority' => 0
             ],
-            'error' => 'Error loading tickets. Please try again.'
+            'error' => '.'
         ]);
     }
 }
@@ -756,7 +756,7 @@ class TicketsController extends Controller
             ]);
 
             return redirect()->back()
-                ->with('error', 'Error loading tickets. Please try again.');
+                ->with('error', '.');
         }
 }    
     public function show($id)
