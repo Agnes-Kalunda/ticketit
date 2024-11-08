@@ -40,7 +40,7 @@
                                                     {{ $ticket->subject }}
                                                 </a>
                                             </td>
-                                            <td>{{ $ticket->customer_name }}</td>
+                                            <td>{{ $ticket->customer->username }}</td>
                                             <td>{{ $ticket->customer_email }}</td>
                                             <td>
                                                 <span class="badge text-white" style="background-color: #666666">

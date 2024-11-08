@@ -67,7 +67,7 @@
                                     @foreach($tickets as $ticket)
                                         <tr>
                                             <td>{{ $ticket->id }}</td>
-                                            <td>{{ $ticket->customer_name }}</td>
+                                            <td>{{ $ticket->customer->username }}</td>
                                             <td>{{ $ticket->subject }}</td>
                                             <td>
                                                 <span class="badge bg-{{ strtolower($ticket->priority_name) }}">
