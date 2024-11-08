@@ -1,16 +1,30 @@
-```php
+
 @extends('layouts.app')
 
 @section('content')
 <div class="container">
     <div class="row justify-content-center">
         <div class="col-md-10">
+            <!-- Status Bar -->
+            @if(session('success'))
+                <div class="alert alert-success alert-dismissible fade show mb-4" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>{{ session('success') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div class="alert alert-danger alert-dismissible fade show mb-4" role="alert">
+                    <i class="bi bi-exclamation-circle me-2"></i>{{ session('error') }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
             <!-- Ticket Header -->
             <div class="card mb-4">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
-                        <i class="bi bi-ticket-detailed"></i> 
-                        Ticket #{{ $ticket->id }}
+                        <i class="bi bi-ticket-detailed me-2"></i>Ticket #{{ $ticket->id }}
                     </h5>
                     <div class="d-flex gap-2">
                         <span class="badge rounded-pill" style="background-color: {{ $ticket->status->color }}">
@@ -54,7 +68,7 @@
                 </div>
             </div>
 
-            
+            <!-- Original Ticket Content -->
             <div class="card mb-4">
                 <div class="card-body">
                     <div class="d-flex">
@@ -84,14 +98,21 @@
                 <div class="comments-section mb-4">
                     @foreach($ticket->comments as $comment)
                         @php
-                            $isStaffComment = $comment->user_id && 
-                                            $comment->user && 
-                                            property_exists($comment->user, 'ticketit_agent') && 
-                                            ($comment->user->ticketit_agent || $comment->user->ticketit_admin);
-
-                            $commenterName = $isStaffComment ? 
-                                $comment->user->name : 
-                                ($comment->customer_id === Auth::guard('customer')->id() ? 'You' : $ticket->customer->name);
+                            $isStaffComment = !empty($comment->user_id) && 
+                                            DB::table('users')
+                                                ->where('id', $comment->user_id)
+                                                ->where(function($query) {
+                                                    $query->where('ticketit_agent', 1)
+                                                          ->orWhere('ticketit_admin', 1);
+                                                })
+                                                ->exists();
+                            
+                            if ($isStaffComment) {
+                                $commenterName = $comment->user->name ?? 'Support Staff';
+                            } else {
+                                $commenterName = $comment->customer_id === Auth::guard('customer')->id() ? 
+                                    'You' : $ticket->customer->name;
+                            }
                         @endphp
                         <div class="card mb-3 {{ $isStaffComment ? 'border-primary' : '' }}">
                             <div class="card-body">
@@ -99,7 +120,9 @@
                                     <div class="flex-shrink-0">
                                         <div class="avatar-circle {{ $isStaffComment ? 'bg-primary' : 'bg-secondary' }}">
                                             <span class="initials">
-                                                {{ $isStaffComment ? substr($comment->user->name, 0, 1) : substr($ticket->customer->name, 0, 1) }}
+                                                {{ $isStaffComment ? 
+                                                    (substr($comment->user->name ?? 'S', 0, 1)) : 
+                                                    substr($ticket->customer->name, 0, 1) }}
                                             </span>
                                         </div>
                                     </div>
@@ -127,8 +150,8 @@
                 </div>
             @endif
 
-            <!-- Reply Form -->
-            @if($ticket->status->name !== 'Closed')
+            <!-- Reply Form - Only show if ticket is neither closed nor resolved -->
+            @if($ticket->status->name !== 'Closed' && $ticket->status->name !== 'Resolved')
                 <div class="card">
                     <div class="card-header">
                         <h6 class="mb-0">
@@ -161,7 +184,11 @@
             @else
                 <div class="alert alert-info d-flex align-items-center">
                     <i class="bi bi-info-circle me-2"></i>
-                    This ticket is closed. Please create a new ticket if you need further assistance.
+                    @if($ticket->status->name === 'Closed')
+                        This ticket is closed. Please create a new ticket if you need further assistance.
+                    @else
+                        This ticket has been resolved. Please create a new ticket if you need further assistance.
+                    @endif
                 </div>
             @endif
         </div>
@@ -242,6 +269,14 @@ textarea.form-control:focus {
     border-radius: 6px;
 }
 
+.alert {
+    border-radius: 8px;
+}
+
+.alert-dismissible .btn-close {
+    padding: 0.75rem;
+}
+
 /* Custom scrollbar */
 .comments-section::-webkit-scrollbar {
     width: 6px;
@@ -288,4 +323,19 @@ textarea.form-control:focus {
     }
 }
 </style>
+@endpush
+
+@push('scripts')
+<script>
+// Auto-hide alerts after 5 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        var alerts = document.querySelectorAll('.alert.alert-success, .alert.alert-danger');
+        alerts.forEach(function(alert) {
+            var bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        });
+    }, 5000);
+});
+</script>
 @endpush

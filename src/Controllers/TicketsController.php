@@ -413,6 +413,60 @@ class TicketsController extends Controller
     }
 
 
+    public function storeComment(Request $request, $id)
+{
+    try {
+        if (!Auth::guard('customer')->check()) {
+            return redirect()->route('home')
+                ->with('warning', 'Unauthorized access');
+        }
+
+        $customer = Auth::guard('customer')->user();
+        
+        // Get ticket and verify ownership
+        $ticket = Ticket::with('status')
+            ->where('customer_id', $customer->id)
+            ->findOrFail($id);
+
+        // Check if ticket is closed or resolved
+        if (in_array($ticket->status->name, ['Closed', 'Resolved'])) {
+            return redirect()->back()
+                ->with('error', "Cannot reply to a {$ticket->status->name} ticket");
+        }
+
+        // Validate request
+        $validated = $request->validate([
+            'content' => 'required|min:2',
+        ]);
+
+        // Create comment
+        $comment = new Comment([
+            'content' => $validated['content'],
+            'ticket_id' => $ticket->id,
+            'customer_id' => $customer->id
+        ]);
+
+        if (!$comment->save()) {
+            throw new \Exception('Failed to save comment');
+        }
+
+        return redirect()->back()
+            ->with('success', 'Reply posted successfully');
+
+    } catch (\Exception $e) {
+        Log::error('Error posting reply:', [
+            'error' => $e->getMessage(),
+            'ticket_id' => $id,
+            'customer_id' => optional(Auth::guard('customer')->user())->id
+        ]);
+
+        return redirect()->back()
+            ->with('error', 'Error posting reply')
+            ->withInput();
+    }
+}
+
+
     public function customerReply(Request $request, $id)
 {
     try {
