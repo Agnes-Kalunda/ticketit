@@ -36,9 +36,11 @@ try {
         Route::get('/', 'TicketsController@index')->name('index');
         Route::get('/create', 'TicketsController@create')->name('create');
         Route::post('/', 'TicketsController@store')->name('store');
-        Route::get('/{ticket}', 'TicketsController@show')->name('show')
+        Route::get('/{id}', 'TicketsController@customerShow')->name('show')
             ->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware');
         Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
+        Route::post('/{id}/reply', 'TicketsController@customerReply')
+            ->name('reply');
 
         // Customer Comments
         Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
