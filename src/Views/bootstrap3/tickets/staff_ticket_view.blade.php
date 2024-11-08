@@ -23,7 +23,7 @@
                                     <tr>
                                         <th>{{ trans('ticketit::lang.table-id') }}</th>
                                         <th>{{ trans('ticketit::lang.table-subject') }}</th>
-                                        <th>Customer</th>
+                                        <!-- <th>Customer</th> -->
                                         <th>Email</th>
                                         <th>Status</th>
                                         <th>Priority</th>
@@ -40,7 +40,7 @@
                                                     {{ $ticket->subject }}
                                                 </a>
                                             </td>
-                                            <td>{{ $ticket->customer->username }}</td>
+                                            <!-- <td>{{ $ticket->customer->username }}</td> -->
                                             <td>{{ $ticket->customer_email }}</td>
                                             <td>
                                                 <span class="badge text-white" style="background-color: #666666">
