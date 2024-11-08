@@ -355,6 +355,152 @@ class TicketsController extends Controller
     }
 }
 
+    public function customerShow($id)
+    {
+        try {
+            if (!$this->isCustomer()) {
+                return redirect()->route('home')
+                    ->with('warning', 'Unauthorized access. Please login as a customer.');
+            }
+
+            $customer = $this->getAuthUser();
+            
+            // Get ticket with all relationships
+            $ticket = Ticket::with([
+                'status',
+                'priority',
+                'category',
+                'agent',
+                'comments' => function($query) {
+                    $query->orderBy('created_at', 'asc');
+                },
+                'comments.user', 
+            ])
+            ->where('customer_id', $customer->id) 
+            ->findOrFail($id);
+
+            // Add useful metadata
+            $ticket->can_reply = !in_array($ticket->status->name, ['Closed', 'Resolved']);
+
+            // Log the view
+            Log::info('Customer viewing ticket', [
+                'customer_id' => $customer->id,
+                'ticket_id' => $id,
+                'ticket_status' => $ticket->status->name
+            ]);
+
+            return view('ticketit::bootstrap3.tickets.showCustomerTicket', [
+                'ticket' => $ticket,
+                'customer' => $customer,
+                'can_reply' => $ticket->can_reply,
+                'statuses' => Status::pluck('name', 'id'),
+                'categories' => Category::pluck('name', 'id'),
+                'priorities' => Priority::pluck('name', 'id')
+            ]);
+
+        } catch (ModelNotFoundException $e) {
+            Log::warning('Customer attempted to view nonexistent ticket:', [
+                'customer_id' => optional($this->getAuthUser())->id,
+                'ticket_id' => $id
+            ]);
+            
+            return redirect()->route('customer.tickets.index')
+                ->with('error', 'Ticket not found.');
+                
+        } catch (\Exception $e) {
+            Log::error('Error showing customer ticket:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'ticket_id' => $id,
+                'customer_id' => optional($this->getAuthUser())->id
+            ]);
+
+            return redirect()->route('customer.tickets.index')
+                ->with('error', 'Error loading ticket. Please try again.');
+        }
+    }
+
+
+
+    public function customerReply(Request $request, $id)
+{
+    try {
+        if (!$this->isCustomer()) {
+            return redirect()->route('home')
+                ->with('warning', 'Unauthorized access');
+        }
+
+        $customer = $this->getAuthUser();
+
+        // Validate request
+        $validated = $request->validate([
+            'content' => 'required|min:2',
+        ]);
+
+        DB::beginTransaction();
+
+        // Get ticket and verify ownership
+        $ticket = Ticket::where('customer_id', $customer->id)
+                       ->findOrFail($id);
+
+        // Check if ticket can be replied to
+        if ($ticket->status->name === 'Closed') {
+            throw new \Exception('Cannot reply to a closed ticket');
+        }
+
+        // Create comment
+        $comment = new Comment([
+            'content' => $validated['content'],
+            'ticket_id' => $ticket->id,
+            'customer_id' => $customer->id,
+        ]);
+
+        if (!$comment->save()) {
+            throw new \Exception('Failed to save comment');
+        }
+
+        // Update ticket
+        $ticket->touch();
+
+        // Reopen if resolved
+        if ($ticket->status->name === 'Resolved') {
+            $openStatus = Status::where('name', 'Open')->first();
+            if ($openStatus) {
+                $ticket->status_id = $openStatus->id;
+                $ticket->save();
+            }
+        }
+
+        DB::commit();
+
+        // Log success
+        Log::info('Customer replied to ticket', [
+            'ticket_id' => $ticket->id,
+            'customer_id' => $customer->id,
+            'comment_id' => $comment->id
+        ]);
+
+        return redirect()->route('customer.tickets.show', $id)
+            ->with('success', 'Your reply has been posted successfully.');
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        
+        Log::error('Error posting customer reply:', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'ticket_id' => $id,
+            'customer_id' => optional($this->getAuthUser())->id
+        ]);
+
+        return redirect()->route('customer.tickets.show', $id)
+            ->with('error', 'Error posting reply. Please try again.')
+            ->withInput();
+    }
+}
+
+
+
     public function data($complete = false)
     {
         if (LaravelVersion::min('5.4')) {
