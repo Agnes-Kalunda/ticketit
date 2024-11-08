@@ -247,26 +247,27 @@ class CommentsController extends Controller
      * Check if user can add comment to ticket
      */
     protected function canAddComment($ticket)
-    {
-        $user = Auth::user();
+{
+    $user = Auth::user();
+    $customer = Auth::guard('customer')->user();
 
-        // Admin cannot add comments
-        if ($user && $user->isAdmin()) {
-            return false;
-        }
-
-        // Agent can add comments to assigned tickets
-        if ($user && $user->isAgent() && $ticket->agent_id === $user->id) {
-            return true;
-        }
-
-        // Customer can add comments to their own tickets
-        if (Auth::guard('customer')->check()) {
-            return $ticket->customer_id === Auth::guard('customer')->id();
-        }
-
+    // Check if an admin user is logged in and prevent adding comments
+    if ($user && method_exists($user, 'isAdmin') && $user->isAdmin()) {
         return false;
     }
+
+    // Check if an agent user is logged in and is assigned to the ticket
+    if ($user && method_exists($user, 'isAgent') && $user->isAgent() && $ticket->agent_id === $user->id) {
+        return true;
+    }
+
+    // Check if a customer is logged in and is the ticket owner
+    if ($customer) {
+        return $ticket->customer_id === $customer->id;
+    }
+
+    return false;
+}
     /**
      * Check if user can edit comment
      */
