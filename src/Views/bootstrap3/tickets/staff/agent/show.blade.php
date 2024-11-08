@@ -70,7 +70,7 @@
                     <!-- Ticket Information -->
                     <div class="row mb-4">
                         <div class="col-md-3">
-                            <div class="text-muted mb-1">Customer</div>
+                            <div class="text-muted mb-1"></div>
                             <strong>{{ $ticket->customer->username ?? 'N/A' }}</strong>
                         </div>
                         <div class="col-md-3">
