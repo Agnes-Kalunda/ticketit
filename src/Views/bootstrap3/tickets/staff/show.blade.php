@@ -88,7 +88,7 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <h6>Customer Details</h6>
-                                    <p><strong>Name:</strong> {{ $ticket->customer->name }}</p>
+                                    <p><strong>Name:</strong> {{ $ticket->customer->username }}</p>
                                     <p><strong>Email:</strong> {{ $ticket->customer->email }}</p>
                                     <p><strong>Submitted:</strong> {{ $ticket->created_at->format('F j, Y g:i A') }}</p>
                                 </div>

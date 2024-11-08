@@ -1,230 +1,168 @@
-# Ticketit - Laravel Support Ticket System
+# Ticketit Package Documentation
 
-A Laravel support ticket system package with dual authentication support for both staff members (Users) and customers. This package is designed to handle support tickets between customers and staff members efficiently.
+A Laravel support ticket package with dual authentication support for staff members (Users) and customers. This package enables efficient ticket management between customers and staff.
 
 ## Features
 
 - Dual authentication system (Staff/Customers)
-- Ticket management system
-- Auto-assignment of agents
-- Ticket categories and priorities
-- Custom permission system
-- Email notifications
-- Statistics and reporting
-- Configurable settings
+- Ticket management with priority levels
+- Status tracking and management
+- Role-based access control (Admin/Agent/Customer)
+- Comment system
+- Customizable views and routes
 
 ## Requirements
 
-- PHP 7.1.3 or higher
-- Laravel 5.8 or higher
-- MySQL 
+- PHP 7.1.3+
+- Laravel 5.8+
+- MySQL/MariaDB
 
 ## Installation
 
-1. Install via Composer:
+1. Add the package to your composer.json:
+```json
+{
+    "require": {
+        "ticket/ticketit": "dev-main"
+    }
+}
+```
+
+2. Install via Composer:
 ```bash
 composer require ticket/ticketit
 ```
 
-2. Register the service provider in `config/app.php`:
+3. Register ServiceProvider in `config/app.php`:
 ```php
 'providers' => [
-    // ...
     Ticket\Ticketit\TicketitServiceProvider::class,
-];
+],
 ```
 
-3. Publish the configuration and assets:
+4. Publish package assets:
 ```bash
-php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --force
-```
+# Publish config
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag=ticketit-config
 
-4. Publish ticket Routes from the  package:
-```bash
-php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag="ticketit-routes"
-```
+# Publish migrations
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag=ticketit-migrations
 
-5. Run the migrations:
-```bash
-php artisan migrate
-```
+# Publish views
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag=ticketit-views
 
+# Publish routes
+php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag=ticketit-routes
+```
 
 ## Configuration
 
-### 1. Add HasTickets Trait
+### Models Setup
 
-Add the `HasTickets` trait to both your User and Customer models:
-
+Add to your User model:
 ```php
-// app/User.php
 use Ticket\Ticketit\Traits\HasTickets;
 
 class User extends Authenticatable
 {
     use HasTickets;
-    // ...
-}
 
-// app/Customer.php
+    protected $fillable = [
+        'name', 'email', 'password', 'ticketit_admin', 'ticketit_agent'
+    ];
+
+    protected $casts = [
+        'ticketit_admin' => 'boolean',
+        'ticketit_agent' => 'boolean'
+    ];
+}
+```
+
+Add to your Customer model:
+```php
 use Ticket\Ticketit\Traits\HasTickets;
 
 class Customer extends Authenticatable
 {
     use HasTickets;
-    // ...
+
+    protected $guard = 'customer';
+
+    protected $fillable = [
+        'name', 'email', 'password', 'username'
+    ];
 }
 ```
 
-### 2. Configure Environment Variables
+### Routes
 
-Add these to your `.env` file:
-```env
-TICKETIT_CUSTOMER_MODEL=App\Customer
-TICKETIT_USER_MODEL=App\User
-TICKETIT_CUSTOMER_GUARD=customer
-TICKETIT_USER_GUARD=web
-```
-
-### 3. Update Config File
-
-The `config/ticketit.php` file contains all settings:
+The package provides these route groups:
 
 ```php
-return [
-    'models' => [
-        'customer' => env('TICKETIT_CUSTOMER_MODEL', 'App\Customer'),
-        'user' => env('TICKETIT_USER_MODEL', 'App\User'),
-    ],
+// Customer Routes
+Route::group([
+    'middleware' => ['web', 'auth:customer'],
+    'prefix' => 'customer/tickets',
+    'as' => 'customer.tickets.',
+], function () {
+    Route::get('/', 'TicketsController@index');
+    Route::get('/create', 'TicketsController@create');
+    Route::post('/', 'TicketsController@store');
+    Route::get('/{ticket}', 'TicketsController@show');
+});
 
-    'guards' => [
-        'customer' => env('TICKETIT_CUSTOMER_GUARD', 'customer'),
-        'user' => env('TICKETIT_USER_GUARD', 'web'),
-    ],
+// Staff Routes
+Route::group([
+    'middleware' => ['web', 'auth:web'],
+    'prefix' => 'staff/tickets',
+    'as' => 'staff.tickets.',
+], function () {
+    Route::get('/', 'TicketsController@staffIndex');
+    Route::get('/{ticket}', 'TicketsController@staffShow');
+    Route::post('/{ticket}/status', 'TicketsController@updateStatus');
+});
+```
 
-    'ticket' => [
-        'user_can_create' => false,
-        'customer_can_create' => true,
-        'agent_notify_customer' => true,
-        'customer_notify_agent' => true,
-    ],
+### Database Schema
 
-    'permissions' => [
-        'customer' => [
-            'create_ticket' => true,
-            'view_own_tickets' => true,
-            'comment_own_tickets' => true,
-        ],
-        'user' => [
-            'view_all_tickets' => true,
-            'manage_tickets' => true,
-            'manage_settings' => true,
-        ],
-    ],
-];
+The package creates these tables:
+- ticketit (tickets)
+- ticketit_comments (comments)
+- ticketit_categories (categories)
+- ticketit_priorities (priorities)
+- ticketit_statuses (statuses)
+- ticketit_settings (settings)
 
 ## Usage
 
-### Customer Functions
-
-```php
-// Get customer tickets
-$customer->tickets();
-$customer->activeTickets();
-$customer->completedTickets();
-
-// Check permissions
-$customer->canCreateTicket();
-$customer->canViewTickets();
-
-// Get statistics
-$customer->getTicketStats();
-```
-
-### User/Staff Functions
-
-```php
-// Get user tickets
-$user->tickets();
-$user->activeTickets();
-$user->agentTickets();
-
-// Check roles/permissions
-$user->isAgent();
-$user->isAdmin();
-$user->canManageTickets();
-
-// Get statistics
-$user->getTicketStats();
-```
-
-### Creating Tickets
-
-For Customers:
+### Creating Tickets (Customers)
 ```php
 $ticket = new Ticket();
 $ticket->subject = 'Issue Subject';
 $ticket->content = 'Issue Description';
-$ticket->priority_id = 1;
 $ticket->category_id = 1;
+$ticket->priority_id = 1;
 $ticket->customer_id = auth()->guard('customer')->id();
 $ticket->save();
 ```
 
-For Users/Staff:
+### Managing Tickets (Staff)
 ```php
-$ticket = new Ticket();
-$ticket->subject = 'Issue Subject';
-$ticket->content = 'Issue Description';
-$ticket->priority_id = 1;
-$ticket->category_id = 1;
-$ticket->user_id = auth()->id();
+// Get tickets assigned to agent
+$tickets = Ticket::where('agent_id', auth()->id())->get();
+
+// Update ticket status
+$ticket->status_id = $newStatusId;
 $ticket->save();
+
+// Add comment
+$comment = new Comment();
+$comment->content = 'Response content';
+$comment->ticket_id = $ticket->id;
+$comment->user_id = auth()->id();
+$comment->save();
 ```
-
-## Routes
-
-The package provides separate route groups for customers and staff:
-
-### Customer Routes
-- `/customer/tickets` - List customer tickets
-- `/customer/tickets/create` - Create new ticket
-- `/customer/tickets/{id}` - View ticket
-
-### Staff Routes
-- `/tickets` - List all tickets
-- `/tickets/create` - Create new ticket
-- `/tickets/{id}` - View ticket
-- `/tickets/{id}/edit` - Edit ticket
-- `/tickets-admin` - Admin panel
-
-## Customization
-
-### Views
-Publish and customize views:
-```bash
-php artisan vendor:publish --provider="Ticket\Ticketit\TicketitServiceProvider" --tag="views"
-```
-
-## Events and Notifications
-
-The package dispatches events for:
-- Ticket creation
-- Status changes
-- Comments
-- Agent assignment
-
-Configure notification settings in the config file.
-
-## Database Structure
-
-Main tables:
-- `ticketit` - Tickets
-- `ticketit_comments` - Ticket comments
-- `ticketit_categories` - Ticket categories
-- `ticketit_priorities` - Ticket priorities
-- `ticketit_statuses` - Ticket statuses
-
 
 ## License
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+
+The MIT License (MIT). See [License File](LICENSE.md).
