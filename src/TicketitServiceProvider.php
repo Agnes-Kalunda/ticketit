@@ -53,7 +53,7 @@ class TicketitServiceProvider extends ServiceProvider
     
         // Register dependencies
         $this->registerDependencies();
-        $this->app->register(\Ticket\Ticketit\Providers\RouteServiceProvider::class);
+        
     
        
         if ($this->app->runningInConsole()) {
