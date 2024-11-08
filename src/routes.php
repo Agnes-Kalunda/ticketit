@@ -69,6 +69,13 @@ try {
             Route::post('/{ticket}/comments', 'CommentsController@store')->name('comments.store');
         });
 
+            // Admin only routes
+        Route::middleware('Ticket\Ticketit\Middleware\AdminAuthMiddleware')->group(function() {
+            Route::post('/{id}/assign', 'TicketsController@assignTicket')->name('admin.assign');
+            Route::delete('/{id}', 'TicketsController@destroy')->name('admin.destroy');
+        });
+
+
         // Agent Routes
         Route::middleware([
             'Ticket\Ticketit\Middleware\AgentAuthMiddleware',
@@ -77,7 +84,7 @@ try {
             // Ticket Management
             Route::get('/{id}/view', 'TicketsController@agentShow')->name('agent.show');
             Route::post('/{id}/status', 'TicketsController@updateStatus')->name('status.update');
-            Route::post('/{id}/assign', 'TicketsController@assignSelf')->name('agent.assign');
+            Route::post('/{id}/assign', 'TicketsController@assignTicket')->name('admin.assign');
             Route::post('/{id}/complete', 'TicketsController@complete')->name('agent.complete');
             Route::post('/{id}/reopen', 'TicketsController@reopen')->name('agent.reopen');
 
