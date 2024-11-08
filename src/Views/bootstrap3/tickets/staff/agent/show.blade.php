@@ -62,7 +62,7 @@
                         <p class="text-muted mb-0">{{ $ticket->subject }}</p>
                     </div>
                     <a href="{{ route('staff.tickets.index') }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="fas fa-arrow-left"></i> Back to List
+                        <!-- <i class="fas fa-arrow-left"></i> Back to List -->
                     </a>
                 </div>
 
