@@ -489,28 +489,28 @@ class TicketitServiceProvider extends ServiceProvider
         ]]);
     }
 
-    protected function setupEventListeners()
-    {
-        Comment::creating(function ($comment) {
-            if (Setting::grab('comment_notification')) {
-                $notification = new NotificationsController();
-                $notification->newComment($comment);
-            }
-        });
+    // protected function setupEventListeners()
+    // {
+    //     Comment::creating(function ($comment) {
+    //         if (Setting::grab('comment_notification')) {
+    //             $notification = new NotificationsController();
+    //             $notification->newComment($comment);
+    //         }
+    //     });
 
-        Ticket::updating(function ($modified_ticket) {
-            $this->handleTicketUpdate($modified_ticket);
-            return true;
-        });
+    //     Ticket::updating(function ($modified_ticket) {
+    //         $this->handleTicketUpdate($modified_ticket);
+    //         return true;
+    //     });
 
-        Ticket::created(function ($ticket) {
-            if (Setting::grab('assigned_notification')) {
-                $notification = new NotificationsController();
-                $notification->newTicketNotifyAgent($ticket);
-            }
-            return true;
-        });
-    }
+    //     Ticket::created(function ($ticket) {
+    //         if (Setting::grab('assigned_notification')) {
+    //             $notification = new NotificationsController();
+    //             $notification->newTicketNotifyAgent($ticket);
+    //         }
+    //         return true;
+    //     });
+    // }
 
     protected function handleTicketUpdate($modified_ticket)
     {
