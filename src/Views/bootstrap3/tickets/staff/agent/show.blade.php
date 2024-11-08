@@ -128,20 +128,20 @@
 
                     <!-- Comment Form - Not for Admins -->
                     @if(!$isAdmin && ($isAgent && $ticket->agent_id == auth()->id()))
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h6 class="mb-0">Add Comment</h6>
-                            </div>
-                            <div class="card-body">
-                                @if($errors->any())
-                                    <div class="alert alert-danger">
-                                        <ul class="mb-0">
-                                            @foreach($errors->all() as $error)
-                                                <li>{{ $error }}</li>
-                                            @endforeach
-                                        </ul>
-                                    </div>
-                                @endif
+    <div class="card mb-4">
+        <div class="card-header">
+            <h6 class="mb-0">Add Comment</h6>
+        </div>
+        <div class="card-body">
+            @if($errors->any())
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
                                 <form action="{{ route('staff.tickets.comments.store', $ticket->id) }}" method="POST">
                                     @csrf

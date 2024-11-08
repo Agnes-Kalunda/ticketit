@@ -39,12 +39,9 @@ class CommentsController extends Controller
     public function store(Request $request, $ticket_id)
     {
         try {
-            // Validate with error messages
-            $request->validate([
+            // Validate request
+            $validatedData = $request->validate([
                 'content' => 'required|string|min:6',
-            ], [
-                'content.required' => 'Please enter a comment.',
-                'content.min' => 'Comment must be at least 6 characters.',
             ]);
 
             DB::beginTransaction();
@@ -54,12 +51,12 @@ class CommentsController extends Controller
 
             // Check authorization
             if (!$this->canAddComment($ticket)) {
-                throw new \Exception('You are not authorized to add comments to this ticket');
+                throw new \Exception('Unauthorized to add comment');
             }
 
             // Create comment
             $comment = new Models\Comment();
-            $comment->content = $request->input('content');
+            $comment->content = $validatedData['content'];
             $comment->ticket_id = $ticket->id;
             $comment->user_id = Auth::id();
 
@@ -70,11 +67,11 @@ class CommentsController extends Controller
             // Update ticket timestamp
             $ticket->touch();
 
-            // Create audit log
-            Models\Audit::create([
-                'operation' => 'Comment added by ' . Auth::user()->name,
+            // Log the comment
+            Log::info('Comment added to ticket', [
+                'ticket_id' => $ticket->id,
                 'user_id' => Auth::id(),
-                'ticket_id' => $ticket->id
+                'user_type' => $this->getUserType()
             ]);
 
             DB::commit();
@@ -82,7 +79,12 @@ class CommentsController extends Controller
             return redirect()->back()->with('success', 'Comment added successfully');
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            // Handle validation errors
+            Log::warning('Comment validation failed:', [
+                'errors' => $e->errors(),
+                'user_id' => Auth::id(),
+                'ticket_id' => $ticket_id
+            ]);
+            
             return redirect()->back()
                 ->withErrors($e->errors())
                 ->withInput();
@@ -265,7 +267,6 @@ class CommentsController extends Controller
 
         return false;
     }
-
     /**
      * Check if user can edit comment
      */
