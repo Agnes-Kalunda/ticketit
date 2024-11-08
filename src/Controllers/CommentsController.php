@@ -18,31 +18,38 @@ class CommentsController extends Controller
         $this->middleware('Ticket\Ticketit\Middleware\ResAccessMiddleware', ['only' => ['store', 'show']]);
     }
 
+
+
+    protected function getUserRole()
+    {
+        if (Auth::user()->isAdmin()) {
+            return 'Admin';
+        }
+        if (Auth::user()->isAgent()) {
+            return 'Agent';
+        }
+        return 'User';
+    }
+
     /**
      * Store a newly created comment
      */
-    public function store(Request $request)
+    public function store(StoreCommentRequest $request)
     {
-        $this->validate($request, [
-            'ticket_id' => 'required|exists:ticketit,id',
-            'content' => 'required|min:6',
-        ]);
-
         try {
             DB::beginTransaction();
 
-            $ticket = Models\Ticket::findOrFail($request->ticket_id);
-
-            // Check authorization
-            if (!$this->canAddComment($ticket)) {
-                throw new \Exception('Unauthorized to add comment');
-            }
+            // Get validated data
+            $validatedData = $request->validated();
+            
+            $ticket = Models\Ticket::findOrFail($validatedData['ticket_id']);
 
             // Create comment
-            $comment = new Models\Comment();
-            $comment->content = $request->content;
-            $comment->ticket_id = $ticket->id;
-            $comment->user_id = Auth::id();
+            $comment = new Models\Comment([
+                'content' => $validatedData['content'],
+                'ticket_id' => $ticket->id,
+                'user_id' => Auth::id()
+            ]);
 
             if (!$comment->save()) {
                 throw new \Exception('Failed to save comment');
@@ -56,7 +63,7 @@ class CommentsController extends Controller
                 'operation' => sprintf(
                     'Comment added by %s (%s)',
                     Auth::user()->name,
-                    Auth::user()->isAdmin() ? 'Admin' : (Auth::user()->isAgent() ? 'Agent' : 'User')
+                    $this->getUserRole()
                 ),
                 'user_id' => Auth::id(),
                 'ticket_id' => $ticket->id
@@ -71,7 +78,8 @@ class CommentsController extends Controller
             Log::error('Error adding comment:', [
                 'error' => $e->getMessage(),
                 'user_id' => Auth::id(),
-                'ticket_id' => $request->ticket_id
+                'ticket_id' => $validatedData['ticket_id'] ?? null,
+                'trace' => $e->getTraceAsString()
             ]);
 
             return back()
@@ -79,6 +87,8 @@ class CommentsController extends Controller
                 ->withInput();
         }
     }
+
+   
 
     /**
      * Show comment edit form
@@ -107,23 +117,19 @@ class CommentsController extends Controller
     /**
      * Update the comment
      */
-    public function update(Request $request, $id)
+    public function update(UpdateCommentRequest $request, $id)
     {
-        $this->validate($request, [
-            'content' => 'required|min:6',
-        ]);
-
         try {
             DB::beginTransaction();
 
+            // Get validated data
+            $validatedData = $request->validated();
+            
             $comment = Models\Comment::findOrFail($id);
-
-            if (!$this->canEditComment($comment)) {
-                throw new \Exception('Unauthorized to update comment');
-            }
-
             $oldContent = $comment->content;
-            $comment->content = $request->content;
+            
+            // Update comment
+            $comment->content = $validatedData['content'];
             
             if (!$comment->save()) {
                 throw new \Exception('Failed to update comment');
@@ -132,9 +138,10 @@ class CommentsController extends Controller
             // Create audit log
             Models\Audit::create([
                 'operation' => sprintf(
-                    'Comment updated by %s (%s)',
+                    'Comment updated by %s (%s). Old content: %s',
                     Auth::user()->name,
-                    Auth::user()->isAdmin() ? 'Admin' : 'Agent'
+                    $this->getUserRole(),
+                    $oldContent
                 ),
                 'user_id' => Auth::id(),
                 'ticket_id' => $comment->ticket_id
@@ -150,7 +157,9 @@ class CommentsController extends Controller
             DB::rollBack();
             Log::error('Error updating comment:', [
                 'error' => $e->getMessage(),
-                'comment_id' => $id
+                'comment_id' => $id,
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return back()
@@ -210,24 +219,25 @@ class CommentsController extends Controller
     /**
      * Check if user can add comment to ticket
      */
-    private function canAddComment($ticket)
+    protected function canAddComment($ticket)
     {
         $user = Auth::user();
 
-        // Admin can always comment
+        // Admin can always add comments
         if ($user->isAdmin()) {
+            return false;
+        }
+
+        // Agent can add comments to assigned tickets
+        if ($user && $user->isAgent() && $ticket->agent_id === $user->id) {
             return true;
         }
 
-        // Assigned agent can comment
-        if ($user->isAgent() && $ticket->agent_id === $user->id) {
-            return true;
+        // Customer can add comments to their own tickets
+        if (Auth::guard('customer')->check()) {
+            return $ticket->customer_id === Auth::guard('customer')->id();
         }
-
-        // Regular user with ticket access can comment
-        if ($ticket->user_id === $user->id) {
-            return true;
-        }
+    
 
         return false;
     }
