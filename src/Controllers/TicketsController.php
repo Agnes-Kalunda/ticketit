@@ -376,7 +376,7 @@ class TicketsController extends Controller
                 },
                 'comments.user', 
             ])
-            ->where('customer_id', $customer->id) 
+            ->where('customer_id', $customer->id)
             ->findOrFail($id);
 
             // Add useful metadata
@@ -389,7 +389,8 @@ class TicketsController extends Controller
                 'ticket_status' => $ticket->status->name
             ]);
 
-            return view('ticketit::bootstrap3.tickets.showCustomerTicket', [
+            
+            return view('ticketit::tickets.showCustomerTicket', [
                 'ticket' => $ticket,
                 'customer' => $customer,
                 'can_reply' => $ticket->can_reply,
@@ -398,15 +399,6 @@ class TicketsController extends Controller
                 'priorities' => Priority::pluck('name', 'id')
             ]);
 
-        } catch (ModelNotFoundException $e) {
-            Log::warning('Customer attempted to view nonexistent ticket:', [
-                'customer_id' => optional($this->getAuthUser())->id,
-                'ticket_id' => $id
-            ]);
-            
-            return redirect()->route('customer.tickets.index')
-                ->with('error', 'Ticket not found.');
-                
         } catch (\Exception $e) {
             Log::error('Error showing customer ticket:', [
                 'error' => $e->getMessage(),
@@ -419,7 +411,6 @@ class TicketsController extends Controller
                 ->with('error', 'Error loading ticket. Please try again.');
         }
     }
-
 
 
     public function customerReply(Request $request, $id)
