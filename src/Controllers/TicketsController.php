@@ -306,19 +306,13 @@ class TicketsController extends Controller
     public function agentShow($id)
 {
     try {
-        // Get the authenticated user
         $user = Auth::user();
-
-        if (!$user || !$user->isAgent()) {
-            Log::warning('Unauthorized agent access attempt', [
-                'user_id' => $user ? $user->id : null,
-                'ticket_id' => $id
-            ]);
+        
+        if (!$user->isAgent()) {
             return redirect()->route('staff.tickets.index')
                 ->with('error', 'Unauthorized access');
         }
 
-        // Get the ticket with all necessary relationships
         $ticket = Ticket::with([
             'status',
             'priority',
@@ -328,12 +322,8 @@ class TicketsController extends Controller
             'comments.user'
         ])->findOrFail($id);
 
-        // Check if the ticket is assigned to this agent or if they're admin
+        // Check if agent is assigned to this ticket
         if ($ticket->agent_id !== $user->id && !$user->isAdmin()) {
-            Log::warning('Agent attempted to view unassigned ticket', [
-                'agent_id' => $user->id,
-                'ticket_id' => $id
-            ]);
             return redirect()->route('staff.tickets.index')
                 ->with('error', 'You can only view tickets assigned to you');
         }
@@ -346,29 +336,18 @@ class TicketsController extends Controller
             'ticket_id' => $id
         ]);
 
-        // Return view with data
-        return view('vendor.ticketit.tickets.staff.agent.show', [
+        return view('ticketit::tickets.staff.agent.show', [  // Updated view path
             'ticket' => $ticket,
             'isAgent' => true,
             'isAdmin' => $user->isAdmin(),
             'statuses' => $statuses
         ]);
 
-    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-        Log::error('Ticket not found:', [
-            'ticket_id' => $id,
-            'error' => $e->getMessage()
-        ]);
-        
-        return redirect()->route('staff.tickets.index')
-            ->with('error', 'Ticket not found');
-            
     } catch (\Exception $e) {
         Log::error('Error showing agent ticket:', [
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString(),
-            'ticket_id' => $id,
-            'user_id' => Auth::id()
+            'ticket_id' => $id
         ]);
 
         return redirect()->route('staff.tickets.index')

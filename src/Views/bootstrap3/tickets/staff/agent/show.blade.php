@@ -24,6 +24,15 @@
 .gap-2 {
     gap: 0.5rem;
 }
+.text-muted {
+    color: #6c757d;
+}
+.border-primary {
+    border-color: #007bff;
+}
+.bg-light {
+    background-color: #f8f9fa;
+}
 </style>
 @endsection
 
@@ -52,6 +61,7 @@
                 </div>
 
                 <div class="card-body">
+                    <!-- Ticket Details -->
                     <div class="row mb-4">
                         <div class="col-md-3">
                             <strong>Customer:</strong>
@@ -79,6 +89,7 @@
                         </div>
                     </div>
 
+                    <!-- Ticket Content -->
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">Ticket Content</h6>
@@ -88,8 +99,8 @@
                         </div>
                     </div>
 
-                    <!-- Update Ticket Status for Agent -->
-                    @if($isAgent && ($ticket->agent_id == auth()->id() || auth()->user()->isAdmin()))
+                    <!-- Status Update Section - Only for Assigned Agent -->
+                    @if($isAgent && !$isAdmin && $ticket->agent_id == auth()->id())
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">Update Ticket Status</h6>
@@ -113,7 +124,8 @@
                     </div>
                     @endif
 
-                    <!-- Agent Add Comment -->
+                    <!-- Comment Form - Not for Admins -->
+                    @if(!$isAdmin && ($isAgent && $ticket->agent_id == auth()->id()))
                     <div class="card mb-4">
                         <div class="card-header">
                             <h6 class="mb-0">Add a Comment</h6>
@@ -138,35 +150,64 @@
                             </form>
                         </div>
                     </div>
+                    @endif
+
+                    <!-- Comments Section - Visible to Everyone -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Comments & Responses</h6>
+                            <span class="badge bg-primary">
+                                {{ $ticket->comments->count() }} 
+                                Comment{{ $ticket->comments->count() != 1 ? 's' : '' }}
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            @if($ticket->comments->isNotEmpty())
+                                @foreach($ticket->comments->sortByDesc('created_at') as $comment)
+                                    <div class="comment-box mb-3 p-3 border rounded {{ $comment->user_id == auth()->id() ? 'border-primary bg-light' : '' }}">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <div>
+                                                <strong>{{ e($comment->user->name) }}</strong>
+                                                @if($comment->user->isAgent())
+                                                    <span class="badge bg-info ms-2">Agent</span>
+                                                @elseif($comment->user->isAdmin())
+                                                    <span class="badge bg-danger ms-2">Admin</span>
+                                                @else
+                                                    <span class="badge bg-secondary ms-2">Customer</span>
+                                                @endif
+                                            </div>
+                                            <small class="text-muted">{{ $comment->created_at->diffForHumans() }}</small>
+                                        </div>
+                                        <div class="comment-content">
+                                            {!! nl2br(e($comment->content)) !!}
+                                        </div>
+                                    </div>
+                                @endforeach
+                            @else
+                                <div class="text-muted text-center py-3">
+                                    No comments yet
+                                </div>
+                            @endif
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <!-- Comments Section -->
-            @if($ticket->comments && $ticket->comments->count() > 0)
-                <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">Comments & Responses</h6>
-                        <span class="badge bg-primary">
-                            {{ $ticket->comments->count() }} 
-                            Comment{{ $ticket->comments->count() != 1 ? 's' : '' }}
-                        </span>
-                    </div>
-                    <div class="card-body">
-                        @foreach($ticket->comments->sortByDesc('created_at') as $comment)
-                            <div class="comment-box mb-3 p-3 border rounded {{ $comment->user_id == auth()->id() ? 'border-primary bg-light' : '' }}">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <strong>{{ e($comment->user->name) }}</strong>
-                                    <small class="text-muted">{{ $comment->created_at->diffForHumans() }}</small>
-                                </div>
-                                <div class="comment-content">
-                                    {!! nl2br(e($comment->content)) !!}
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-hide alerts after 5 seconds
+    setTimeout(function() {
+        const alerts = document.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            const bsAlert = new bootstrap.Alert(alert);
+            bsAlert.close();
+        });
+    }, 5000);
+});
+</script>
+@endpush
 @endsection
