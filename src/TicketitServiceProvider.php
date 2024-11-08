@@ -489,28 +489,40 @@ class TicketitServiceProvider extends ServiceProvider
         ]]);
     }
 
-    // protected function setupEventListeners()
-    // {
-    //     Comment::creating(function ($comment) {
-    //         if (Setting::grab('comment_notification')) {
-    //             $notification = new NotificationsController();
-    //             $notification->newComment($comment);
-    //         }
-    //     });
-
-    //     Ticket::updating(function ($modified_ticket) {
-    //         $this->handleTicketUpdate($modified_ticket);
-    //         return true;
-    //     });
-
-    //     Ticket::created(function ($ticket) {
-    //         if (Setting::grab('assigned_notification')) {
-    //             $notification = new NotificationsController();
-    //             $notification->newTicketNotifyAgent($ticket);
-    //         }
-    //         return true;
-    //     });
-    // }
+    protected function setupEventListeners()
+    {
+        Comment::creating(function ($comment) {
+            Log::info('Comment being created', [
+                'ticket_id' => $comment->ticket_id,
+                'user_id' => Auth::id()
+            ]);
+            return true;
+        });
+    
+        Ticket::updating(function ($modified_ticket) {
+            try {
+                $original_ticket = Ticket::find($modified_ticket->id);
+                Log::info('Ticket being updated', [
+                    'ticket_id' => $modified_ticket->id,
+                    'old_status' => $original_ticket->status_id,
+                    'new_status' => $modified_ticket->status_id,
+                    'user_id' => Auth::id()
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Error in ticket update event: ' . $e->getMessage());
+            }
+            return true;
+        });
+    
+        Ticket::created(function ($ticket) {
+            Log::info('New ticket created', [
+                'ticket_id' => $ticket->id,
+                'customer_id' => $ticket->customer_id,
+                'agent_id' => $ticket->agent_id
+            ]);
+            return true;
+        });
+    }
 
     protected function handleTicketUpdate($modified_ticket)
     {
